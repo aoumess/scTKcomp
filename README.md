@@ -1,2 +1,2 @@
 # scTKcomp
-A supplementary for singleCellTK, filling some "holes" (empty droplets filtering, cell cycle scoring)
+A supplementary package for singleCellTK, filling some gaps (empty droplets filtering, cell cycle scoring)

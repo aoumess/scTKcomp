@@ -1,0 +1,9 @@
+import(mclust)
+importFrom("BUSpaRse", "read_count_output")
+importFrom("DropletUtils", "barcodeRanks", "emptyDrops")
+importFrom("dplyr", "arrange", "mutate")
+importFrom("ggplot2", "aes", "annotate", "element_blank", "expand_limits", "geom_density", "geom_hline", "geom_point", "geom_smooth", "geom_vline", "ggplot", "ggtitle", "guide_legend", "guides", "scale_colour_manual", "scale_x_log10", "scale_y_log10", "theme", "xlab", "ylab")
+importFrom("Matrix", "Matrix", "colSums")
+importFrom("Seurat", "read10X", "ReadAlevin", "CreateSeuratObject")
+
+export("scTK.load.edf")

@@ -1,0 +1,24 @@
+Encoding: UTF-8
+Package: scTKcomp
+Type: Package
+Title: A complement to singleCellTK
+Version: 0.0.1
+Date: 2022-10-17
+Author: Bastien Job
+Authors@R: person("Bastien", "Job", email = "bastien.job@inserm.fr", role = c("aut", "cre"))
+Depends: R(>= 3.1.0)
+Imports:
+  BUSpaRse,
+  dplyr,
+  DropletUtils,
+  ggplot2,
+  Matrix,
+  Seurat,
+  
+Suggests:
+biocViews: Software
+BugReports: https://github.com/aoumess/scTKcomp/issues
+Description: A supplementary package for singleCellTK, filling some gaps (empty droplets filtering, cell cycle scoring)
+License: MIT + file LICENSE
+LazyData: false
+Byte-Compile: yes
