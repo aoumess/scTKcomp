@@ -20,14 +20,14 @@ scTK_launch <- function() {
 # 6) Creation of the Seurat object
 
 ## Loading SC data to SCE object
-scTK_load <- function(data_path = NULL, sample_name = NULL, assay = 'RNA', out_dir = getwd(), return_data = FALSE) {
+scTK_load <- function(data_path = NULL, sample_name = NULL, exp.name = 'RNA', out_dir = getwd(), return_data = FALSE) {
   
   ## Checks
   if (is.null(sample_name)) stop('A sample name is required !')
   sample_name <- as.character(sample_name)
   if (!dir.exists(data_path)) stop('Input data path does not exist !')
   if (!dir.exists(out_dir)) stop('Output directory does not exist !')
-  if (!is.character(assay)) stop('Assay name should be a character (string)')
+  if (!is.character(exp.name)) stop('Experiment name should be a character (string)')
   if (!is.logical(return_data)) stop('The return_data parameter should be a logical (boolean)')
   
   message("Loading data ...")
@@ -80,24 +80,25 @@ scTK_load <- function(data_path = NULL, sample_name = NULL, assay = 'RNA', out_d
   rm(scmat.bin)
   
   ## Creation of the SCE object
-  sobj <- SingleCellExperiment::SingleCellExperiment(assays = list(counts=scmat), mainExpName = assay)
+  sobj <- SingleCellExperiment::SingleCellExperiment(assays = list(counts=scmat), mainExpName = exp.name)
   rm(scmat)
   ## Adding metrics
   sobj$sample <- as.factor(sample_name)
-  sobj[[paste0('nCount_', assay)]] <- numi_drop
-  sobj[[paste0('nFeature_', assay)]] <- ngen_drop
-  sobj[[paste0('log_nCount_', assay)]] <- log(sobj[[paste0('nCount_', assay)]]+1)
-  sobj[[paste0('log_nFeature_', assay)]] <- log(sobj[[paste0('nFeature_', assay)]]+1)
+  sobj[[paste0('nCount_', exp.name)]] <- numi_drop
+  sobj[[paste0('nFeature_', exp.name)]] <- ngen_drop
+  sobj[[paste0('log_nCount_', exp.name)]] <- log(sobj[[paste0('nCount_', exp.name)]]+1)
+  sobj[[paste0('log_nFeature_', exp.name)]] <- log(sobj[[paste0('nFeature_', exp.name)]]+1)
   
   ## Fill misc metadata : metrics
   mymeta <- list(misc=list())
   mymeta$misc$params$Droplet_Quality$captured_droplet <- droplets.nb
   mymeta$misc$params$Droplet_Quality$total_number_UMI <- umi.total.nb
   mymeta$misc$samplename <- sample_name
+  mymeta$misc$id <- 0
   sobj@metadata <- mymeta
   
   ## File output
-  saveRDS(object = sobj, file = paste0(out_dir, '/', sample_name, '_raw_SCE.RDS'), compress = 'bzip2')
+  saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sample_name, sprintf('%02d', sobj@metadata$misc$id), 'raw_SCE.RDS'), collapse = '_')), compress = 'bzip2')
   
   ## Return data ?
   if (return_data) return(sobj)
@@ -108,33 +109,41 @@ scTK_load <- function(data_path = NULL, sample_name = NULL, assay = 'RNA', out_d
 
 
 ## Filtering of Empty droplets
-scTK_edf <- function(sobj = NULL, assay = 'RNA', droplets_min = 1E+04, emptydrops_fdr = 1E-03, emptydrops_retain = NULL, my_seed = 1337L, out_dir = getwd(), draw_plots = TRUE, return_data = FALSE) {
+scTK_edf <- function(sobj_rds = NULL, droplets_min = 1E+04, emptydrops_fdr = 1E-03, emptydrops_retain = NULL, my_seed = 1337L, draw_plots = TRUE, return_data = FALSE) {
   
   ## Checks
-  if (is.null(sobj)) stop('the sobj parameter should not be NULL !')
-  if (!dir.exists(out_dir)) stop('Output directory does not exist !')
-  if (!is.character(assay)) stop('Assay name should be a character (string)')
+  if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
+  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  # if (!dir.exists(out_dir)) stop('Output directory does not exist !')
+  # if (!is.character(assay)) stop('Assay name should be a character (string)')
   if (!is.logical(draw_plots)) stop('The return_data parameter should be a logical (boolean)')
   if (!is.logical(return_data)) stop('The return_data parameter should be a logical (boolean)')
   
-  ## Checking sobj format
-  in.format <- is(sobj)[1]
-  if (tolower(in.format) != 'singlecellexperiment') stop ("Input object is in unknown format ! Should be a 'SingleCellExperiment' object.")
+  ## Loading sobj
+  message('Loading SCE object ...')
+  sobj <- readRDS(sobj_rds)
+  if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
+  
+  ## Setting out_dir
+  out_dir <- dirname(sobj_rds)
   
   message('Full droplets matrix dimensions :')
-  droplets.nb <- ncol(sobj@assays@data@listData$counts)
+  droplets.nb <- ncol(sobj)
   print(dim(sobj))
   
   message('Total UMIs :')
-  umi.total.nb <- sum(sobj@assays@data@listData$counts)
+  umi.total.nb <- sum(SummarizedExperiment::assay(x = sobj))
   print(umi.total.nb)
   
-  if (!is.null(droplets_min) && ncol(sobj@assays@data@listData$counts) > droplets_min && !is.null(emptydrops_fdr)) {
+  ## Adding id
+  sobj@metadata$misc$id <- sobj@metadata$misc$id+1
+  
+  if (!is.null(droplets_min) && droplets.nb > droplets_min && !is.null(emptydrops_fdr)) {
     ## Removing empty droplets
     message("Removing empty droplets with emptyDrops ...")
-    bc_rank <- DropletUtils::barcodeRanks(sobj@assays@data@listData$counts)
+    bc_rank <- DropletUtils::barcodeRanks(SummarizedExperiment::assay(x = sobj))
     set.seed(my_seed)
-    bc_rank2 <- DropletUtils::emptyDrops(sobj@assays@data@listData$counts, retain = emptydrops_retain)
+    bc_rank2 <- DropletUtils::emptyDrops(SummarizedExperiment::assay(x = sobj), retain = emptydrops_retain)
     keep.bc <- bc_rank2$FDR < emptydrops_fdr
     rm(bc_rank2)
     keep.bc[is.na(keep.bc)] <- FALSE
@@ -148,9 +157,9 @@ scTK_edf <- function(sobj = NULL, assay = 'RNA', droplets_min = 1E+04, emptydrop
       ### Yerp ! Filtering empty droplets
       # scmat <- sobj@assays@data@listData$counts[, which(keep.bc)]
       message('Filtered droplets matrix dimensions :')
-      print(dim(sobj@assays@data@listData$counts[,keep.bc]))
+      print(dim(SummarizedExperiment::assay(x = sobj)[,keep.bc]))
       message('Total UMIs (filtered) :')
-      umi.kept.nb <- sum(sobj@assays@data@listData$counts[,keep.bc])
+      umi.kept.nb <- sum(SummarizedExperiment::assay(x = sobj)[,keep.bc])
       print(umi.kept.nb)
       message('Fraction of UMIs in cells :')
       print(umi.kept.nb / umi.total.nb)
@@ -158,7 +167,7 @@ scTK_edf <- function(sobj = NULL, assay = 'RNA', droplets_min = 1E+04, emptydrop
       ## Plotting when requested
       if(draw_plots){
         ### Kneeplot
-        png(filename = paste0(out_dir, '/', sobj@metadata$misc$samplename, "_kneeplot.png"), width = 1000, height = 700)
+        png(filename = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), "kneeplot.png"), collapse = '_')), width = 1000, height = 700)
         plot(bc_rank$rank, bc_rank$total+1, log = "xy", xlab = "Rank", ylab = "Total", col = ifelse(keep.bc, "red", "black"), pch = 20, cex = ifelse(keep.bc, 1, 2), main = paste0(sobj@metadata$misc$samplename, ' kneeplot (', length(which(keep.bc)), ' barcodes kept)'))
         o <- order(bc_rank$rank)
         lines(bc_rank$rank[o], bc_rank$fitted[o], col = "red")
@@ -168,12 +177,12 @@ scTK_edf <- function(sobj = NULL, assay = 'RNA', droplets_min = 1E+04, emptydrop
         dev.off()
         rm(bc_rank)
         ### Saturation plot
-        png(filename = paste0(out_dir, '/', sobj@metadata$misc$samplename, "_satplot.png"), width = 1000, height = 700)
-        suppressWarnings(plot(sobj[[paste0('nCount_', assay)]], sobj[[paste0('nFeature_', assay)]], pch = 20, log = "xy", col = ifelse(keep.bc, "red", "black"), xlab = 'Nb of UMIs in droplet (log)', ylab = 'Nb of genes with at least 1 UMI count in droplets (log)', main = paste0(sample_name, ' saturation plot (', length(which(keep.bc)), ' barcodes kept)')))
+        png(filename = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), "satplot.png"), collapse = '_')), width = 1000, height = 700)
+        suppressWarnings(plot(sobj$nCount_RNA, sobj$nFeature_RNA, pch = 20, log = "xy", col = ifelse(keep.bc, "red", "black"), xlab = 'Nb of UMIs in droplet (log)', ylab = 'Nb of genes with at least 1 UMI count in droplets (log)', main = paste0(sobj@metadata$misc$samplename, ' saturation plot (', length(which(keep.bc)), ' barcodes kept)')))
         legend("topleft", pch = c(20, 20), col = c("red", "black"), legend = c("cell", "empty"))
         dev.off()
         ### Saturation distrib plot
-        # png(filename = paste0(out_dir, sample_name, "_satdistplot.png"), width = 1000, height = 700)
+        # png(filename = paste0(out_dir, '/', paste(c(sample_name, sprintf('%02d', sobj@metadata$misc$id), "satdistplot.png"), collapse = '_')), width = 1000, height = 700)
         # umipgen <- numi_drop / ngen_drop
         # upg.range <- range(umipgen)
         # plot(density(umipgen[keep.bc], col = "red", xlim = c(0, upg.range[2], )))
@@ -199,7 +208,7 @@ scTK_edf <- function(sobj = NULL, assay = 'RNA', droplets_min = 1E+04, emptydrop
   sobj@metadata$misc$params$seed <- my_seed
   
   ## File output
-  saveRDS(object = sobj, file = paste0(out_dir, '/', sobj@metadata$misc$samplename, '_EDf.RDS'), compress = 'bzip2')
+  saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), 'EDf.RDS'), collapse = '_')), compress = 'bzip2')
   
   ## Return data ?
   if (return_data) return(sobj)
@@ -210,36 +219,36 @@ scTK_edf <- function(sobj = NULL, assay = 'RNA', droplets_min = 1E+04, emptydrop
 
 
 ## Estimate cell cycle : TRICYCLE
-scTK_cc_tricycle <- function(sobj = NULL, assay = 'RNA', species = 'human', feature_type = 'SYMBOL', out_dir = getwd(), return_data = FALSE) {
-  
-  ## Checks
-  if (is.null(sobj)) stop('the sobj parameter should not be NULL !')
-  if (!dir.exists(out_dir)) stop('Output directory does not exist !')
-  if (!is.character(assay)) stop('Assay name should be a character (string)')
-  if (!is.logical(return_data)) stop('The return_data parameter should be a logical (boolean)')
-  if (!tolower(species) %in% c('human', 'mouse')) stop('Tricycle is only compatible with human and mouse.')
-  if(!tolower(feature_type) %in% c('ensembl', 'symbol')) stop("Feature type should be  'ENSEMBL' or 'SYMBOL'")
-  
-  ## Checking sobj format
-  in.format <- is(sobj)[1]
-  if (tolower(in.format) != 'singlecellexperiment') stop ("Input object is in unknown format ! Should be a 'SingleCellExperiment' object.")
-  
-  ## Converting to Seurat obj
-  sobj_seu <- Seurat::CreateSeuratObject(counts = sobj@assays@data@listData$counts, project = sobj@metadata$misc$samplename, assay = assay, meta.data = as.data.frame(sobj@colData@listData))
-  ## Quick log-normalization
-  sobj_seu <- Seurat::NormalizeData(object = sobj_seu, normalization_method = 'LogNormalize')
-  ## Running Tricycle
-  sobj_seu <- SeuratWrappers::Runtricycle(object = sobj_seu, assay = assay, gname.type = 'SYMBOL', species = 'human', reduction.name = 'TRIC', reduction.key = 'TRIC_')
-  sobj$cc_tricycle <- sobj_seu$tricyclePosition
-  rm(sobj_seu)
-  
-  ## File output
-  # saveRDS(object = sobj, file = paste0(out_dir, '/', sobj@metadata$misc$samplename, '_CC.tricycle.RDS'), compress = 'bzip2')
-  saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, SingleCellExperiment::mainExpName(sobj), assay, 'CC.tricycle.RDS'), collapse = '_')), compress = 'bzip2')
-  
-  ## Return data ?
-  if (return_data) return(sobj)
-}
+# scTK_cc_tricycle <- function(sobj = NULL, assay = 'RNA', species = 'human', feature_type = 'SYMBOL', out_dir = getwd(), return_data = FALSE) {
+#   
+#   ## Checks
+#   if (is.null(sobj)) stop('the sobj parameter should not be NULL !')
+#   if (!dir.exists(out_dir)) stop('Output directory does not exist !')
+#   if (!is.character(assay)) stop('Assay name should be a character (string)')
+#   if (!is.logical(return_data)) stop('The return_data parameter should be a logical (boolean)')
+#   if (!tolower(species) %in% c('human', 'mouse')) stop('Tricycle is only compatible with human and mouse.')
+#   if(!tolower(feature_type) %in% c('ensembl', 'symbol')) stop("Feature type should be  'ENSEMBL' or 'SYMBOL'")
+#   
+#   ## Checking sobj format
+#   in.format <- is(sobj)[1]
+#   if (tolower(in.format) != 'singlecellexperiment') stop ("Input object is in unknown format ! Should be a 'SingleCellExperiment' object.")
+#   
+#   ## Converting to Seurat obj
+#   sobj_seu <- Seurat::CreateSeuratObject(counts = sobj@assays@data@listData$counts, project = sobj@metadata$misc$samplename, assay = assay, meta.data = as.data.frame(sobj@colData@listData))
+#   ## Quick log-normalization
+#   sobj_seu <- Seurat::NormalizeData(object = sobj_seu, normalization_method = 'LogNormalize')
+#   ## Running Tricycle
+#   sobj_seu <- SeuratWrappers::Runtricycle(object = sobj_seu, assay = assay, gname.type = 'SYMBOL', species = 'human', reduction.name = 'TRIC', reduction.key = 'TRIC_')
+#   sobj$cc_tricycle <- sobj_seu$tricyclePosition
+#   rm(sobj_seu)
+#   
+#   ## File output
+#   # saveRDS(object = sobj, file = paste0(out_dir, '/', sobj@metadata$misc$samplename, '_CC.tricycle.RDS'), compress = 'bzip2')
+#   saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, SingleCellExperiment::mainExpName(sobj), assay, 'CC.tricycle.RDS'), collapse = '_')), compress = 'bzip2')
+#   
+#   ## Return data ?
+#   if (return_data) return(sobj)
+# }
 
 ## Example
 # scTK_cc_tricycle(sobj = readRDS("/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/10X_DATASET_1kPBMC_CR3v3/COUNT_MATRIX/pbmc_1k_v3_raw_feature_bc_matrix/PBMC1K10X_edf.RDS"), out_dir = "/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/10X_DATASET_1kPBMC_CR3v3/COUNT_MATRIX/pbmc_1k_v3_raw_feature_bc_matrix/", assay = 'RNA', species = 'human', feature_type = 'SYMBOL')
@@ -269,9 +278,11 @@ scTK_cc_schwabe <- function(sobj = NULL, assay = 'RNA', species = 'human', featu
   message("Cell cycle phases according to Schwabe method : ")
   print(table(sobj$cc_schwabe, useNA = "always"))
   
+  ## Adding id
+  sobj@metadata$misc$id <- sobj@metadata$misc$id+1
+  
   ## File output
-  # saveRDS(object = sobj, file = paste0(out_dir, '/', sobj@metadata$misc$samplename, '_CC.schwabe.RDS'), compress = 'bzip2')
-  saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, SingleCellExperiment::mainExpName(sobj), assay, 'CC.schwabe.RDS'), collapse = '_')), compress = 'bzip2')
+  saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), SingleCellExperiment::mainExpName(sobj), assay, 'CC.schwabe.RDS'), collapse = '_')), compress = 'bzip2')
   ## Return data ?
   if (return_data) return(sobj)
 }
@@ -281,19 +292,25 @@ scTK_cc_schwabe <- function(sobj = NULL, assay = 'RNA', species = 'human', featu
 
 
 ## Estimate cell cycle : Seurat
-scTK_cc_seurat <- function(sobj = NULL, exp.name = NULL, assay = 'counts', cc_seurat_file = NULL, nbin = 24, out_dir = getwd(), return_data = FALSE) {
+scTK_cc_seurat <- function(sobj_rds = NULL, exp.name = NULL, assay = 'counts', cc_seurat_file = NULL, nbin = 24, return_data = FALSE) {
   
   ## Checks
   message('Checks ...')
-  if (is.null(sobj)) stop('The sobj parameter should not be NULL !')
+  if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
+  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  # if (is.null(sobj)) stop('The sobj parameter should not be NULL !')
   if (is.null(cc_seurat_file)) stop('The RDS containing Seurat gene lists is required !')
-  if (!dir.exists(out_dir)) stop('Output directory does not exist !')
+  # if (!dir.exists(out_dir)) stop('Output directory does not exist !')
   if (!is.character(assay)) stop('Assay name should be a character (string)')
   if (!is.logical(return_data)) stop('The return_data parameter should be a logical (boolean)')
   
-  ## Checking sobj format
-  in.format <- is(sobj)[1]
-  if (tolower(in.format) != 'singlecellexperiment') stop ("Input object is in unknown format ! Should be a 'SingleCellExperiment' object.")
+  ## Loading sobj
+  message('Loading SCE object ...')
+  sobj <- readRDS(sobj_rds)
+  if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
+  
+  ## Setting out_dir
+  out_dir <- dirname(sobj_rds)
   
   ## Loading cc file
   message('Loading Seurat cell cyle genes ...')
@@ -313,7 +330,7 @@ scTK_cc_seurat <- function(sobj = NULL, exp.name = NULL, assay = 'counts', cc_se
   sobj_seu <- Seurat::CreateSeuratObject(counts = seu.counts, project = sobj@metadata$misc$samplename, assay = exp.name, meta.data = as.data.frame(sobj@colData@listData))
   
   ## Quick log-normalization
-  sobj_seu <- Seurat::NormalizeData(object = sobj_seu, normalization_method = 'LogNormalize')
+  sobj_seu <- Seurat::NormalizeData(object = sobj_seu, normalization.method = 'LogNormalize')
   
   ### Seurat
   message('Cell cycle scoring with Seurat ...')
@@ -326,9 +343,12 @@ scTK_cc_seurat <- function(sobj = NULL, exp.name = NULL, assay = 'counts', cc_se
   message("Cell cycle phases according to Seurat: ")
   print(table(sobj$cc_seurat.Phase, useNA = 'always'))
   
+  ## Adding id
+  sobj@metadata$misc$id <- sobj@metadata$misc$id+1
+  
   ## File output
-  # saveRDS(object = sobj, file = paste0(out_dir, '/', sobj@metadata$misc$samplename, '_CC.seurat.RDS'), compress = 'bzip2')
-  saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, SingleCellExperiment::mainExpName(sobj), assay, 'CC.seurat.RDS'), collapse = '_')), compress = 'bzip2')
+  message('Saving results ...')
+  saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), SingleCellExperiment::mainExpName(sobj), assay, 'CC.seurat.RDS'), collapse = '_')), compress = 'bzip2')
   ## Return data ?
   if (return_data) return(sobj)
 }
@@ -338,27 +358,35 @@ scTK_cc_seurat <- function(sobj = NULL, exp.name = NULL, assay = 'counts', cc_se
 
 
 ## Estimate cell cycle : Cyclone (scran)
-scTK_cc_cyclone <- function(sobj = NULL, assay = 'counts', cc_cyclone_file = NULL, out_dir = getwd(), return_data = FALSE) {
+scTK_cc_cyclone <- function(sobj_rds = NULL, assay = 'counts', cc_cyclone_file = NULL, return_data = FALSE) {
   
   ## Checks
-  if (is.null(sobj)) stop('The sobj parameter should not be NULL !')
+  if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
+  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  # if (is.null(sobj)) stop('The sobj parameter should not be NULL !')
   if (is.null(cc_cyclone_file)) stop('The RDS containing Cyclone gene pairs is required !')
-  if (!dir.exists(out_dir)) stop('Output directory does not exist !')
+  # if (!dir.exists(out_dir)) stop('Output directory does not exist !')
   if (!is.character(assay)) stop('Assay name should be a character (string)')
   if (!is.logical(return_data)) stop('The return_data parameter should be a logical (boolean)')
   if(!assay %in% names(SummarizedExperiment::assays(sobj))) stop('Provided assay not found in the provided SCE object.')
   
-  ## Checking sobj format
-  in.format <- is(sobj)[1]
-  if (tolower(in.format) != 'singlecellexperiment') stop ("Input object is in unknown format ! Should be a 'SingleCellExperiment' object.")
+  ## Loading sobj
+  message('Loading SCE object ...')
+  sobj <- readRDS(sobj_rds)
+  if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
+  
+  ## Setting out_dir
+  out_dir <- dirname(sobj_rds)
   
   ## Loading cc file
+  message('Loading cyclone cell cycle genes ...')
   cc_data <- readRDS(cc_cyclone_file)
   
   ## Cyclone
   set.seed(sobj@metadata$misc$params$seed)
   # doParallel::registerDoParallel(nthreads)
   # BPPARAM <- BiocParallel::SerialParam()
+  message('Cell cycle scoring with cyclone')
   cycres <- scran::cyclone(sobj, pairs = cc_data, assay.type = assay, verbose = FALSE)
   sobj$cc_cyclone.Phase <- as.factor(cycres$phases)
   sobj$cc_cyclone.G1.Score <- cycres$normalized.scores$G1
@@ -368,8 +396,12 @@ scTK_cc_cyclone <- function(sobj = NULL, assay = 'counts', cc_cyclone_file = NUL
   message("Cell cycle phases according to Cyclone: ")
   print(table(sobj$cc_cyclone.Phase, useNA = 'always'))
   
+  ## Adding id
+  sobj@metadata$misc$id <- sobj@metadata$misc$id+1
+  
   ## File output
-  saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, SingleCellExperiment::mainExpName(sobj), assay, 'CC.cyclone.RDS'), collapse = '_')), compress = 'bzip2')
+  message('Saving results ...')
+  saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), SingleCellExperiment::mainExpName(sobj), assay, 'CC.cyclone.RDS'), collapse = '_')), compress = 'bzip2')
   
   ## Return data ?
   if (return_data) return(sobj)
@@ -393,15 +425,25 @@ scTK_cc_cyclone <- function(sobj = NULL, assay = 'counts', cc_cyclone_file = NUL
 ## . coef_cut           [0<=num<1]              Do not display (as colors) coefficients inferior to this value on the heatmap
 ## . color_palette      [vec(col)]              Color vector (length 2 : start,end) for the heatmap
 ## . out_dir            [char]                  Path to the output image
-scTK_assess_covar <- function(sobj = NULL, assay = 'counts', factor_names = NULL, conti_names = NULL, ctrl_features, marker_features, red_method = 'pca', ndim_max = 10, center = TRUE, scale = TRUE, coef_cut = 0, color_palette = c("white", "orangered3"), out_dir = getwd()) {
-  ## Checks
+scTK_assess_covar <- function(sobj_rds = NULL, assay = 'counts', factor_names = NULL, conti_names = NULL, ctrl_features, marker_features, red_method = 'pca', ndim_max = 10, center = TRUE, scale = TRUE, coef_cut = 0, color_palette = c("white", "orangered3")) {
+  message('Checks ...')
   ### Mandatory
-  if (!dir.exists(out_dir)) stop('Output directory does not exist !')
+  if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
+  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  # if (!dir.exists(out_dir)) stop('Output directory does not exist !')
   if (!is.character(assay)) stop('Assay name should be a character (string)')
   if (is.null(sobj)) stop('The sobj parameter should not be NULL !') else if(!(assay %in% names(sobj@assays))) stop(paste0('Assay "', assay, '" does not exist !'))
   if (all(is.null(c(factor_names, conti_names, ctrl_features, marker_features)))) stop('At least one of [factor_names], [conti.colnames], [ctrl_features] or [marker_features] should not be NULL.')
   if (ndim_max <= 0) stop('[ndim_max] should be a non-null positive integer (and <= s samples).')
   if (!tolower(red_method) %in% c('pca', 'mds.euc', 'mds.spear')) stop('Unknown or unsupported dimension reduction method')
+  
+  ## Loading sobj
+  message('Loading SCE object ...')
+  sobj <- readRDS(sobj_rds)
+  if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
+  
+  ## Setting out_dir
+  out_dir <- dirname(sobj_rds)
   
   ## Loading data 
   mat <- SummarizedExperiment::assay(x = sobj, i = assay)
@@ -507,7 +549,7 @@ scTK_assess_covar <- function(sobj = NULL, assay = 'counts', factor_names = NULL
                                    row_title = 'Dimensions',
                                    column_split = cf.types,
                                    top_annotation = ComplexHeatmap::HeatmapAnnotation(Type = cf.types, col = list(Type = setNames(object = c('blue', 'lightblue', 'pink', 'red'), nm = c('C.factor', 'C.continuous', 'F.control', 'F.marker')))))
-  png(filename = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, exp.name, assay, 'covar.png'), collapse = '_')), width = 400+(50*length(cf.names)), height = 1000)
+  png(filename = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), exp.name, assay, 'covar.png'), collapse = '_')), width = 400+(50*length(cf.names)), height = 1000)
   ComplexHeatmap::draw(BC.hm)
   dev.off()
 }
@@ -517,9 +559,11 @@ scTK_assess_covar <- function(sobj = NULL, assay = 'counts', factor_names = NULL
 
 
 ## List assay names in an SCE object
-scTK_list_assays <- function(sobj = NULL) {
+scTK_list_assays <- function(sobj_rds = NULL) {
   ## Checks
-  if (is.null(sobj)) stop('The sobj parameter should not be NULL !')
+  if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
+  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  sobj <- readRDS(sobj_rds)
   message('Experiment [', SingleCellExperiment::mainExpName(sobj), '] (main)')
   message('\tAssay(s) : ', paste0('[', paste(names(sobj@assays), collapse = '], ['), ']'))
   alt.names <- SingleCellExperiment::altExpNames(sobj)
@@ -535,18 +579,30 @@ scTK_list_assays <- function(sobj = NULL) {
 
 ## Normalization with covariate regression, using Seurat methods (SCTransform / LogNormalize / CLR))
 ## Expected value for 'normalization_method' : 'SCT', 'LN', 'CLR'
-scTK_norm_covar <- function(sobj = NULL, assay = 'counts', normalization_method = 'SCT', features = 3000, covariates = NULL, seed = 12345, out_dir = getwd(), return_data = FALSE) {
+scTK_norm_covar <- function(sobj_rds = NULL, assay = 'counts', normalization_method = 'SCT', max.dims = 50, features = 3000, covariates = NULL, return_data = FALSE) {
   
   valid.norm <- c('SCT', 'LN', 'CLR', 'SCBFA')
   
   ## Checks
   message('Checks ...')
-  if (!dir.exists(out_dir)) stop('Output directory does not exist !')
+  if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
+  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  # if (!dir.exists(out_dir)) stop('Output directory does not exist !')
   if (!is.character(assay)) stop('Assay name should be a character (string)')
   if (is.null(sobj)) stop('The sobj parameter should not be NULL !') else if(!(assay %in% names(sobj@assays))) stop(paste0('Assay "', assay, '" does not exist !'))
   if (!is.logical(return_data)) stop('The return_data parameter should be a logical (boolean)')
   if (!tolower(normalization_method) %in% tolower(valid.norm)) stop('Unknown normalization method !')
 
+  ## Loading sobj
+  message('Loading SCE object ...')
+  sobj <- readRDS(sobj_rds)
+  if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
+  
+  ## Setting out_dir
+  out_dir <- dirname(sobj_rds)
+  
+  seed <- sobj@metadata$misc$params$seed
+  
   ## Cleaning covariates
   message('Cleaning covariates ...')
   if(!is.null(covariates)) covariates <- sort(unique(covariates))
@@ -582,32 +638,45 @@ scTK_norm_covar <- function(sobj = NULL, assay = 'counts', normalization_method 
         X <- cbind(X, if(vtr.scale) scale(minimeta[[v]]) else minimeta[[v]])
       }
     }
+    ## Running SCBFA
+    bfa.res <- scBFA::scBFA(scData = sobj, numFactors = max.dims, X = X)
+    ## Shaping results
+    dimnames(bfa.res$ZZ) <- list(colnames(sobj), paste0('SCBFA_', 1L:max.dims))
+    ## Adding the SCBFA reducedDim object
+    SingleCellExperiment::reducedDim(x = sobj, type = paste0('SCBFA', max.dims), withDimnames = TRUE) <- bfa.res$ZZ
+    ## Plotting Elbowplot
+    varZZ <- matrixStats::colVars(bfa.res$ZZ)
+    png(paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, assay, toupper(normalization_method), 'elbow.png'), collapse = '_')), width = (max.dims*35)+150, height = 800)
+    plot(ZZvar, type = 'l', pch = 20, xlab = 'SCBFA component', ylab = 'Variance', main = 'SCBFA Elbow plot')
+    dev.off()
+  } else {
     
-    system.time(sobj_scbfa <- scBFA::scBFA(scData = sobj, numFactors = max.dims, X = X))
+    if (tolower(normalization_method) == tolower('SCT')) {
+      ## SCT
+      sobj_seu <- suppressWarnings(Seurat::SCTransform(object = sobj_seu, assay = assay, new.assay.name = paste0('SCT.', assay), vars.to.regress = covariates, seed.use = seed, variable.features.n = features, return.only.var.genes = FALSE))
+    } else if (tolower(normalization_method) == tolower('LN')) {
+      ## LogNorm
+      sobj <- Seurat::NormalizeData(sobj_seu, normalization_method = 'LogNormalize', assay = assay, )
+      sobj <- Seurat::FindVariableFeatures(sobj, assay = assay, nfeatures = features)
+      sobj <- Seurat::ScaleData(object = sobj, vars.to.regress = covariates, do.scale = TRUE, scale.max = 10, block.size = 1000)
+    } else if (tolower(normalization_method) == tolower('CLR')) {
+      ## CLR
+      sobj <- Seurat::NormalizeData(sobj, normalization_method = 'CLR', assay = assay)
+      sobj <- Seurat::FindVariableFeatures(sobj, assay = assay, nfeatures = features)
+      sobj <- Seurat::ScaleData(object = sobj, vars.to.regress = covariates, do.scale = TRUE, scale.max = 10, block.size = 1000)
+    } else stop('Unknown or unsupported normalization method !')
+    
+    ## Converting back to SCE
+    sobj <- Seurat::as.SingleCellExperiment(sobj_seu)
+    sobj@metadata <- mymeta
+    rm(sobj_seu)
   }
   
-  if (tolower(normalization_method) == tolower('SCT')) {
-    ## SCT
-    sobj_seu <- suppressWarnings(Seurat::SCTransform(object = sobj_seu, assay = assay, new.assay.name = paste0('SCT.', assay), vars.to.regress = covariates, seed.use = seed, variable.features.n = features, return.only.var.genes = FALSE))
-  } else if (tolower(normalization_method) == tolower('LN')) {
-    ## LogNorm
-    sobj <- Seurat::NormalizeData(sobj_seu, normalization_method = 'LogNormalize', assay = assay, )
-    sobj <- Seurat::FindVariableFeatures(sobj, assay = assay, nfeatures = features)
-    sobj <- Seurat::ScaleData(object = sobj, vars.to.regress = covariates, do.scale = TRUE, scale.max = 10, block.size = 1000)
-  } else if (tolower(normalization_method) == tolower('CLR')) {
-    ## CLR
-    sobj <- Seurat::NormalizeData(sobj, normalization_method = 'CLR', assay = assay)
-    sobj <- Seurat::FindVariableFeatures(sobj, assay = assay, nfeatures = features)
-    sobj <- Seurat::ScaleData(object = sobj, vars.to.regress = covariates, do.scale = TRUE, scale.max = 10, block.size = 1000)
-  } else stop('Unknown or unsupported normalization method !')
-  
-  ## Converting back to SCE
-  sobj <- Seurat::as.SingleCellExperiment(sobj_seu)
-  sobj@metadata <- mymeta
-  rm(sobj_seu)
+  ## Adding id
+  sobj@metadata$misc$id <- sobj@metadata$misc$id+1
   
   ## File output
-  saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, assay, toupper(normalization_method)), collapse = '_'), '.rds'), compress = 'bzip2')
+  saveRDS(object = sobj, file = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), assay, toupper(normalization_method)), collapse = '_'), '.rds'), compress = 'bzip2')
   
   ## Return data ?
   if (return_data) return(sobj)
