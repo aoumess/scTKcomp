@@ -113,7 +113,7 @@ scTK_edf <- function(sobj_rds = NULL, droplets_min = 1E+04, emptydrops_fdr = 1E-
   
   ## Checks
   if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
-  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  if(!file.exists(sobj_rds)) stop('Provided RDS not found !')
   # if (!dir.exists(out_dir)) stop('Output directory does not exist !')
   # if (!is.character(assay)) stop('Assay name should be a character (string)')
   if (!is.logical(draw_plots)) stop('The draw_plots parameter should be a logical (boolean)')
@@ -297,7 +297,7 @@ scTK_cc_seurat <- function(sobj_rds = NULL, exp.name = NULL, assay = 'counts', c
   ## Checks
   message('Checks ...')
   if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
-  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  if(!file.exists(sobj_rds)) stop('Provided RDS not found !')
   # if (is.null(sobj)) stop('The sobj parameter should not be NULL !')
   if (is.null(cc_seurat_file)) stop('The RDS containing Seurat gene lists is required !')
   # if (!dir.exists(out_dir)) stop('Output directory does not exist !')
@@ -362,7 +362,7 @@ scTK_cc_cyclone <- function(sobj_rds = NULL, assay = 'counts', cc_cyclone_file =
   
   ## Checks
   if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
-  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  if(!file.exists(sobj_rds)) stop('Provided RDS not found !')
   # if (is.null(sobj)) stop('The sobj parameter should not be NULL !')
   if (is.null(cc_cyclone_file)) stop('The RDS containing Cyclone gene pairs is required !')
   # if (!dir.exists(out_dir)) stop('Output directory does not exist !')
@@ -429,7 +429,7 @@ scTK_assess_covar <- function(sobj_rds = NULL, assay = 'counts', factor_names = 
   message('Checks ...')
   ### Mandatory
   if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
-  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  if(!file.exists(sobj_rds)) stop('Provided RDS not found !')
   # if (!dir.exists(out_dir)) stop('Output directory does not exist !')
   if (!is.character(assay)) stop('Assay name should be a character (string)')
   if (is.null(sobj)) stop('The sobj parameter should not be NULL !') else if(!(assay %in% names(sobj@assays))) stop(paste0('Assay "', assay, '" does not exist !'))
@@ -562,7 +562,7 @@ scTK_assess_covar <- function(sobj_rds = NULL, assay = 'counts', factor_names = 
 scTK_list_assays <- function(sobj_rds = NULL) {
   ## Checks
   if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
-  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  if(!file.exists(sobj_rds)) stop('Provided RDS not found !')
   sobj <- readRDS(sobj_rds)
   message('Experiment [', SingleCellExperiment::mainExpName(sobj), '] (main)')
   message('\tAssay(s) : ', paste0('[', paste(names(sobj@assays), collapse = '], ['), ']'))
@@ -586,7 +586,7 @@ scTK_norm_covar <- function(sobj_rds = NULL, assay = 'counts', normalization_met
   ## Checks
   message('Checks ...')
   if (is.null(sobj_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
-  if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
+  if(!file.exists(sobj_rds)) stop('Provided RDS not found !')
   # if (!dir.exists(out_dir)) stop('Output directory does not exist !')
   if (!is.character(assay)) stop('Assay name should be a character (string)')
   if (is.null(sobj)) stop('The sobj parameter should not be NULL !') else if(!(assay %in% names(sobj@assays))) stop(paste0('Assay "', assay, '" does not exist !'))
