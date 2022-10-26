@@ -116,7 +116,7 @@ scTK_edf <- function(sobj_rds = NULL, droplets_min = 1E+04, emptydrops_fdr = 1E-
   if(!file.exists(sobj_rds)) strop('Provided RDS not found !')
   # if (!dir.exists(out_dir)) stop('Output directory does not exist !')
   # if (!is.character(assay)) stop('Assay name should be a character (string)')
-  if (!is.logical(draw_plots)) stop('The return_data parameter should be a logical (boolean)')
+  if (!is.logical(draw_plots)) stop('The draw_plots parameter should be a logical (boolean)')
   if (!is.logical(return_data)) stop('The return_data parameter should be a logical (boolean)')
   
   ## Loading sobj
