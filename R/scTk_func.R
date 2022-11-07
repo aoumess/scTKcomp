@@ -12,17 +12,16 @@
 
 ## LAUNCH singleCellTK (this function won't actally work in every place for singleCelTK v2.4, as some parts of the workflow will overload the Matrix hack)
 scTK_launch <- function() {
-  library(Matrix)
-  library(singleCellTK)
   # library(reticulate)
-  
   ## Install venv
   # sctkPythonInstallConda(envname = 'sctk', packages = c("pip", "scipy", "numpy", "astroid", "six"), pipIgnoreInstalled = FALSE, pythonVersion = '3.9')
-  sctkPythonInstallVirtualEnv(envname = 'sctkvenv', packages = c("pip", "scipy", "numpy", "astroid", "six"))
+  # sctkPythonInstallVirtualEnv(envname = 'sctkvenv', packages = c("pip", "scipy", "numpy", "astroid", "six"))
   ## Select python environment
-  selectSCTKVirtualEnvironment('sctkvenv')
+  # selectSCTKVirtualEnvironment('sctkvenv')
   # selectSCTKConda('sctk')
   
+  library(Matrix)
+  library(singleCellTK)
   ## Force using web browser rather than Rstudio
   options('Matrix.warnDeprecatedCoerce' = 0, "shiny.launch.browser" = .rs.invokeShinyWindowExternal)
   ## Launch scTK
@@ -132,51 +131,14 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = 'RNA'
 # scTK_load(data_path = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/10X_DATASET_1kPBMC_CR3v3/COUNT_MATRIX/pbmc_1k_v3_raw_feature_bc_matrix', sample_name = 'PBMC1K10X')
 
 
-## List assay names in an SCE object
-scTK_list_assays <- function(in_rds = NULL, return_data = FALSE) {
-  ## Checks
-  if (is.null(in_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
-  if(!file.exists(in_rds)) stop('Provided RDS not found !')
-  
-  ## Loading SCE
-  sobj <- readRDS(in_rds)
-  
-  ## Additional checks on sobj
-  if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
-  
-  retlist <- list()
-  
-  ## Main exp
-  if(!return_data) {
-    message('Experiment : [', SingleCellExperiment::mainExpName(sobj), '] (main)')
-    expassays <- names(sobj@assays)
-    for (ea in seq_along(expassays)) message('\tAssay ', ea, ' : [', expassays[ea], ']\t[', nrow(SummarizedExperiment::assay(x = sobj, i = expassays[ea])), ' x ', ncol(SummarizedExperiment::assay(x = sobj, i = expassays[ea])), ']\t[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == expassays[ea]], ']')
-  } else retlist[['main']] <- list(name = SingleCellExperiment::mainExpName(sobj),
-                                   assay = names(sobj@assays))
-  
-  ## Alt exp
-  alt.names <- SingleCellExperiment::altExpNames(sobj)
-  for (en in seq_along(alt.names)) {
-    if(!return_data) {
-      message('Experiment : [', alt.names[en], '] (alt)')
-      expassays <- names(SingleCellExperiment::altExp(x = sobj, e = alt.names[en])@assays)
-      for (ea in seq_along(expassays)) message('\tAssay ', ea, ' : [', expassays[ea], ']\t[', nrow(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ' x ', ncol(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ']\t[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == expassays[ea]], ']')
-    } else retlist[['alt']][[alt.names[en]]] <- names(SingleCellExperiment::altExp(x = sobj, e = alt.names[en])@assays)
-  }
-  if(return_data) return(retlist)
-}
-
-## scTK_list_assays() EXAMPLE
-# scTK_list_assays(in_rds = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/TEST_DATASET/ANALYSIS/testRDS.RDS')
-
-
 ## SCE OBJECT DESCRIPTION
-scTK_SCE_desc <- function(in_rds = NULL, return_data = FALSE) {
+scTK_descriptor <- function(in_rds = NULL, max_levels = 100, return_data = FALSE) {
   ## Checks
   if (is.null(in_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
   if(!file.exists(in_rds)) stop('Provided RDS not found !')
   
   ## Loading SCE
+  message('Loading SCE object ...')
   sobj <- readRDS(in_rds)
   
   ## Additional checks on sobj
@@ -184,18 +146,16 @@ scTK_SCE_desc <- function(in_rds = NULL, return_data = FALSE) {
   
   retlist <- list()
   
-  ## Main exp
+  ## MAIN EXPERIMENT
   if(!return_data) {
-    ### EXP
-    message('Experiment : [', SingleCellExperiment::mainExpName(sobj), '] (main)')
+    ### EXPERIMENT NAME
+    message('EXPERIMENT : [', SingleCellExperiment::mainExpName(sobj), '] (main)')
     ### ASSAYS
-    # expassays <- names(sobj@assays)
-    # for (ea in seq_along(expassays)) message('\tAssay ', ea, ' : [', expassays[ea], ']\t[', nrow(SummarizedExperiment::assay(x = sobj, i = expassays[ea])), ' x ', ncol(SummarizedExperiment::assay(x = sobj, i = expassays[ea])), ']\t[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == expassays[ea]], ']')
     expassays <- SummarizedExperiment::assays(x = sobj)
-    for (ea in seq_along(expassays)) message('\tAssay ', ea, ' : [', names(expassays)[ea], ']\t[', nrow(expassays[[ea]]), ' x ', ncol(expassays[[ea]]), ']\t[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == names(expassays)[ea]], ']')
+    for (ea in seq_along(expassays)) message('\tASSAY ', ea, ' : [', names(expassays)[ea], ']\t[', nrow(expassays[[ea]]), ' x ', ncol(expassays[[ea]]), ']\t[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == names(expassays)[ea]], ']')
     ### DIMRED
     dimreds <- SingleCellExperiment::reducedDims(x = sobj)
-    for (dr in seq_along(dimreds)) message('\tDimRed ', dr, ' : [', names(dimreds)[dr], ']\t[', nrow(dimreds[[dr]]), ' x ', ncol(dimreds[[dr]]), ']')
+    for (dr in seq_along(dimreds)) message('\tDIMRED ', dr, ' : [', names(dimreds)[dr], ']\t[', nrow(dimreds[[dr]]), ' x ', ncol(dimreds[[dr]]), ']')
   } else retlist[['main']] <- list(name = SingleCellExperiment::mainExpName(sobj),
                                    assay = names(sobj@assays))
   
@@ -203,11 +163,31 @@ scTK_SCE_desc <- function(in_rds = NULL, return_data = FALSE) {
   alt.names <- SingleCellExperiment::altExpNames(sobj)
   for (en in seq_along(alt.names)) {
     if(!return_data) {
-      message('Experiment : [', alt.names[en], '] (alt)')
+      message('EXPERIMENT : [', alt.names[en], '] (alt)')
       expassays <- names(SingleCellExperiment::altExp(x = sobj, e = alt.names[en])@assays)
-      for (ea in seq_along(expassays)) message('\tAssay ', ea, ' : [', expassays[ea], ']\t[', nrow(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ' x ', ncol(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ']\t[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == expassays[ea]], ']')
+      for (ea in seq_along(expassays)) message('\tASSAY ', ea, ' : [', expassays[ea], ']\t[', nrow(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ' x ', ncol(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ']\t[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == expassays[ea]], ']')
     } else retlist[['alt']][[alt.names[en]]] <- names(SingleCellExperiment::altExp(x = sobj, e = alt.names[en])@assays)
   }
+  
+  ### BARCODE META
+  if(!return_data) {
+    bc.df <- as.data.frame(sobj@colData)
+    message('BARCODES METADATA :')
+    for (b in seq_len(ncol(bc.df))) {
+      b.fac <- as.factor(bc.df[,b])
+      if (nlevels(b.fac) < max_levels) {
+        b.tbl <- as.data.frame(table(b.fac, useNA = 'always'))
+        colnames(b.tbl)[1] <- colnames(bc.df)[b]
+        print(knitr::kable(b.tbl, escape = FALSE))
+      } else {
+        # message(colnames(bc.df)[b], ' : CONTI')
+        message('\n',colnames(bc.df)[b])
+        print(summary(bc.df[,b]))
+        # message('\t\t', colnames(bc.df)[b], ' : ', print(summary(b.fac)))
+      }
+    }
+  }
+  
   if(return_data) return(retlist)
 }
 
@@ -286,6 +266,15 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
       
       ## Plotting when requested
       if(draw_plots){
+        
+        ## Computing some metrics
+        numi_drop <- Matrix::colSums(x = scmat[,keep.bc])
+        scmat.bin <- scmat[,keep.bc]
+        attr(scmat.bin, "x")[attr(scmat.bin, "x") >= 1] <- 1
+        scmat.bin <- Matrix::drop0(scmat.bin)
+        ngen_drop <- Matrix::colSums(x = scmat.bin)
+        rm(scmat.bin)
+        
         ### Kneeplot
         png(filename = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), "kneeplot.png"), collapse = '_')), width = 1000, height = 700)
         plot(bc_rank$rank, bc_rank$total+1, log = "xy", xlab = "Rank", ylab = "Total", col = ifelse(keep.bc, "red", "black"), pch = 20, cex = ifelse(keep.bc, 1, 2), main = paste0(sobj@metadata$misc$samplename, ' kneeplot (', length(which(keep.bc)), ' barcodes kept)'))
@@ -298,7 +287,7 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
         rm(bc_rank)
         ### Saturation plot
         png(filename = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), "satplot.png"), collapse = '_')), width = 1000, height = 700)
-        suppressWarnings(plot(sobj$nCount_RNA, sobj$nFeature_RNA, pch = 20, log = "xy", col = ifelse(keep.bc, "red", "black"), xlab = 'Nb of UMIs in droplet (log)', ylab = 'Nb of genes with at least 1 UMI count in droplets (log)', main = paste0(sobj@metadata$misc$samplename, ' saturation plot (', length(which(keep.bc)), ' barcodes kept)')))
+        suppressWarnings(plot(numi_drop, ngen_drop, pch = 20, log = "xy", col = ifelse(keep.bc, "red", "black"), xlab = 'Nb of UMIs in droplet (log)', ylab = 'Nb of genes with at least 1 UMI count in droplets (log)', main = paste0(sobj@metadata$misc$samplename, ' saturation plot (', length(which(keep.bc)), ' barcodes kept)')))
         legend("topleft", pch = c(20, 20), col = c("red", "black"), legend = c("cell", "empty"))
         dev.off()
         ### Saturation distrib plot
@@ -452,7 +441,7 @@ scTK_scSG <- function(in_rds = NULL, exp_name = NULL, raw_assay = 'counts', norm
   if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
   
   ## Checking if requested exp and assay (and feature subset) exist
-  expassay.check <- scTK_SCE_desc(in_rds = in_rds, return_data = TRUE)
+  expassay.check <- scTK_descriptor(in_rds = in_rds, return_data = TRUE)
   ## Setting type of experience
   exp_type <- NULL
   exp_type <- if(is.null(exp_name) & is.null(SingleCellExperiment::mainExpName(sobj))) 'main' else if (exp_name == SingleCellExperiment::mainExpName(sobj)) 'main' else if (exp_name %in% names(expassay$alt)) 'alt' else stop('Requested experiment does not exist !')
@@ -565,13 +554,18 @@ scTK_assess_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', 
   if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
   
   ## Checking if requested exp and assay (and feature subset) exist
-  expassay.check <- scTK_SCE_desc(in_rds = in_rds, return_data = TRUE)
+  expassay.check <- suppressMessages(scTK_descriptor(in_rds = in_rds, return_data = TRUE))
   ## Setting type of experience
   exp_type <- NULL
-  exp_type <- if(is.null(exp_name) & is.null(SingleCellExperiment::mainExpName(sobj))) 'main' else if (exp_name == SingleCellExperiment::mainExpName(sobj)) 'main' else if (exp_name %in% names(expassay$alt)) 'alt' else stop('Requested experiment does not exist !')
-  if(exp_type == 'main' & !assay %in% expassay.check[['main']][['assay']]) stop('Requested assay does not exist for the main experiment !')
-  if(exp_type == 'alt' & !assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested assay does not exist for the requested alternate experiment !')
+  exp_type <- if(is.null(exp_name)) 'main' else if (exp_name == SingleCellExperiment::mainExpName(sobj)) 'main' else if (exp_name %in% names(expassay.check$alt)) 'alt' else stop('Requested experiment does not exist !')
+  if(exp_type == 'main') {
+    if (!assay %in% expassay.check[['main']][['assay']]) stop('Requested assay does not exist for the main experiment !')
+  }
+  if(exp_type == 'alt') {
+    if(!assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested assay does not exist for the requested alternate experiment !')
+  }
   
+  message('Exp type : ', exp_type)
   ## Setting out_dir
   out_dir <- dirname(in_rds)
   
@@ -636,7 +630,8 @@ scTK_assess_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', 
   message('Performing dimension reduction ...')
   # if (tolower(red_method) == 'pca') norm.red <- base::svd(x = mat, nv = ndim_max)$v
   if (tolower(red_method) == 'pca') {
-    norm.red <- if (nrow(mat) > 1000) irlba::prcomp_irlba(x = t(mat), n = ndim_max, center = FALSE, scale. = FALSE)$x else prcomp(x = t(mat), center = FALSE, scale. = FALSE)$x
+    # norm.red <- if (nrow(mat) > 1000) irlba::prcomp_irlba(x = t(mat), n = ndim_max, center = FALSE, scale. = FALSE)$x else prcomp(x = t(mat), center = FALSE, scale. = FALSE)$x
+    norm.red <- irlba::prcomp_irlba(x = t(mat), n = ndim_max, center = FALSE, scale. = FALSE)$x
   }
   if (tolower(red_method) == 'mds.euc') norm.red <- stats::cmdscale(d = dist(x = t(mat), method = 'euclidean'), k = ndim_max)
   if (tolower(red_method) == 'mds.spear') norm.red <- stats::cmdscale(d = as.dist(1-cor(mat, method = 'spearman')), k = ndim_max)
@@ -699,8 +694,9 @@ scTK_assess_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', 
 }
 
 ## scTK_assess_covar() EXAMPLE
-# scTK_assess_covar(rds_in = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/TEST_DATASET/ANALYSIS/testRDS.RDS', assay = 'SoupX', factor_names = c('hsn', 'cc_seurat.Phase', 'cc_cyclone.Phase'), conti_names = c('log_nCount_RNA', 'log_nFeature_RNA', 'soupX_nUMIs', 'subsets_mm.ribo_percent', 'subsets_mm.stress_percent', 'subsets_Mito_percent', 'cc_seurat.SmG2M.Score', 'cc_cyclone.SmG2M.Score'), ctrl_features = c('Gapdh'), marker_features = c('Il2ra', 'Cd8b1', 'Cd8a', 'Cd4', 'Ccr7', 'Itm2a', 'Aif1', 'Hba-a1'), ndim_max = 25)
+# scTK_assess_covar(rds_in = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/TEST_DATASET/ANALYSIS/testRDS.RDS', assay = 'SoupX', factor_names = c('hsn', 'cc_seurat.Phase'), conti_names = c('log_nCount_RNA', 'log_nFeature_RNA', 'soupX_nUMIs', 'subsets_Ribo_percent', 'subsets_Stress_percent', 'subsets_Mito_percent', 'cc_seurat.SmG2M.Score'), ctrl_features = c('Gapdh'), marker_features = c('Il2ra', 'Cd8b1', 'Cd8a', 'Cd4', 'Ccr7', 'Itm2a', 'Aif1', 'Hba-a1'), ndim_max = 25)
 
+# scTK_assess_covar(in_rds = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/DATASETS/PAIVA/20221107/PAIVA_02d_SLN2K.rds', exp_name = 'SLN2K', assay = 'SLN2K', factor_names = c('cc_seurat.Phase'), conti_names = c('subsets_Ribo_percent', 'subsets_Stress_percent', 'subsets_Mito_percent', 'cc_seurat.SmG2M.Score'), ctrl_features = c('Gapdh'), marker_features = c('Il2ra', 'Plac8', 'Ly6d', 'Ccr7', 'Itm2a', 'C1qb', 'Hmgn2'), ndim_max = 25)
 
 
 ## REGRESS COVARIATES
@@ -729,25 +725,35 @@ scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts',
   ok.models <- c('linear', 'poisson', 'negbinom')
   if (!tolower(model_use) %in% ok.models) stop('Statistical model to use should be one of "linear", "poisson" or "negbin" !')
   
-  ## Checking if requested exp and assay (and feature subset) exist
-  expassay.check <- scTK_list_assays(in_rds = in_rds, return_data = TRUE)
-  if(is.null(exp_name) | exp_name == SingleCellExperiment::mainExpName(sobj)) {
-    if (!assay %in% expassay.check[['main']][['assay']]) stop('Requested assay does not exist for the main experiment !')
-  } else if (!exp_name %in% names(expassay.check[['alt']])) stop('Requested experiment name does not exist !') else if (!assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested assay does not exist for the requested alternate experiment name !')
-  if(!is.null(feature_subset)) {
-    if (!feature_subset %in% names(expassay.check[['alt']])) stop('Requested subset foes not exist as experiment !') else if (!feature_subset %in% expassay.check[['alt']][[feature_subset]]) stop('Requested assay does not exist for the requested alternate experiment name !')
-  }
-  
   ## Loading sobj
   message('Loading SCE object ...')
   sobj <- readRDS(in_rds)
   if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
   
+  ## Checking if requested exp and assay (and feature subset) exist
+  expassay.check <- suppressMessages(scTK_descriptor(in_rds = in_rds, return_data = TRUE))
+  exp_type = NULL
+  exp_type <- if(is.null(exp_name)) 'main' else if (exp_name == SingleCellExperiment::mainExpName(sobj)) 'main' else if (exp_name %in% names(expassay.check$alt)) 'alt' else stop('Requested experiment does not exist !')
+  if(exp_type == 'main') {
+    if (!assay %in% expassay.check[['main']][['assay']]) stop('Requested assay does not exist for the main experiment !')
+  }
+  if(exp_type == 'alt') {
+    if(!assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested assay does not exist for the requested alternate experiment !')
+  }
+  
+  # if(is.null(exp_name) | exp_name == SingleCellExperiment::mainExpName(sobj)) {
+  #   if (!assay %in% expassay.check[['main']][['assay']]) stop('Requested assay does not exist for the main experiment !')
+  # } else if (!exp_name %in% names(expassay.check[['alt']])) stop('Requested experiment name does not exist !') else if (!assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested assay does not exist for the requested alternate experiment name !')
+  if(!is.null(feature_subset)) {
+    if (!feature_subset %in% names(expassay.check[['alt']])) stop('Requested subset foes not exist as experiment !') else if (!feature_subset %in% expassay.check[['alt']][[feature_subset]]) stop('Requested assay does not exist for the requested alternate experiment name !')
+  }
+  
   ## Setting out_dir
   out_dir <- if(out_rds == 'auto') dirname(in_rds) else dirname(out_rds)
   
   ## Loading data
-  scmat <- if(is.null(exp_name) | exp_name == SingleCellExperiment::mainExpName(sobj)) SummarizedExperiment::assay(x = sobj, i = assay) else SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = exp_name), i = assay)
+  scmat <- if(exp_type == 'main') SummarizedExperiment::assay(x = sobj, i = assay) else SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = exp_name), i = assay)
+  # scmat <- if(is.null(exp_name) | exp_name == SingleCellExperiment::mainExpName(sobj)) SummarizedExperiment::assay(x = sobj, i = assay) else SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = exp_name), i = assay)
   
   ## Restrict to subset if requested
   if (!is.null(feature_subset)) {
@@ -776,6 +782,7 @@ scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts',
   }
   data.resid <- matrix(nrow = nrow(scmat), ncol = ncol(scmat))
   ## Regressing per gene
+  message('Performing regression using covariate(s) [', paste(vars.to.regress, collapse = ', '), '] on assay [', assay, '] from exp [', exp_name , '] ...')
   nticks <- 10
   repticks <- setNames(object = unname(cumsum(table(cut(x = features.regress, breaks = nticks)))), nm = seq.int(from = 10, to = 100, by = nticks))
   for (i in 1:length(x = features.regress)) {
@@ -815,8 +822,8 @@ scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts',
   
   ## File output
   if(!is.null(out_rds)) {
-    out_name <- paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), model_use, 'REG'), collapse = '_')
-    if(out_rds == 'auto') out_rds <- paste0(out_dir, '/', out_name, '.png')
+    out_name <- paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), model_use, exp_name, assay, 'REG'), collapse = '_')
+    if(out_rds == 'auto') out_rds <- paste0(out_dir, '/', out_name, '.RDS')
     saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
     reg_table <- data.frame(Regressed.covariate = vars.to.regress, Type = vars.types)
     write.table(reg_table, file = paste0(out_dir, '/', out_name, '.tsv'), sep = '\t', quote = FALSE, row.names = FALSE)
