@@ -460,16 +460,22 @@ scTK_scSG <- function(in_rds = NULL, exp_name = NULL, raw_assay = 'counts', norm
   ## Checking if requested exp and assay (and feature subset) exist
   expassay.check <- scTK_descriptor(in_rds = in_rds, return_data = TRUE)
   ## Setting type of experience
-  exp_type <- NULL
-  exp_type <- if(is.null(exp_name) & is.null(SingleCellExperiment::mainExpName(sobj))) 'main' else if (exp_name == SingleCellExperiment::mainExpName(sobj)) 'main' else if (exp_name %in% names(expassay$alt)) 'alt' else stop('Requested experiment does not exist !')
+  exp_type = NULL
+  if(is.null(exp_name)) {
+    if (is.null(expassay.check$main$name)) exp_type <- 'main'
+  } else {
+    if (exp_name %in% names(expassay.check$alt)) exp_type <- 'alt'
+  }
+  if(is.null(exp_type)) stop('Could not find the requested experiment in neither main nor alternate experiments !')
   if(exp_type == 'main') {
-    if(!raw_assay %in% expassay.check[['main']][['assay']]) stop('Requested raw assay does not exist for the main experiment !')
-    if(!norm_assay %in% expassay.check[['main']][['assay']]) stop('Requested normalized assay does not exist for the main experiment !')
+    if (!assay %in% expassay.check[['main']][['assay']]) stop('Requested raw assay does not exist for the main experiment !')
+    if (!norm_assay %in% expassay.check[['main']][['assay']]) stop('Requested normalized assay does not exist for the main experiment !')
   }
   if(exp_type == 'alt') {
-    if(!raw_assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested raw assay does not exist for the requested alternate experiment !')
-    if(!norm_assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested normalized assay does not exist for the requested alternate experiment !')
-  } 
+    if(!assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested raw assay does not exist for the requested alternate experiment !')
+    if(!assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested normalized assay does not exist for the requested alternate experiment !')
+  }
+  
   ## Setting out_dir
   # out_dir <- if(out_rds == 'auto') dirname(in_rds) else dirname(out_rds)
   
@@ -574,14 +580,20 @@ scTK_assess_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', 
   ## Checking if requested exp and assay (and feature subset) exist
   expassay.check <- suppressMessages(scTK_descriptor(in_rds = in_rds, return_data = TRUE))
   ## Setting type of experience
-  exp_type <- NULL
-  exp_type <- if(is.null(exp_name)) 'main' else if (exp_name == SingleCellExperiment::mainExpName(sobj)) 'main' else if (exp_name %in% names(expassay.check$alt)) 'alt' else stop('Requested experiment does not exist !')
+  exp_type = NULL
+  if(is.null(exp_name)) {
+    if (is.null(expassay.check$main$name)) exp_type <- 'main'
+  } else {
+    if (exp_name %in% names(expassay.check$alt)) exp_type <- 'alt'
+  }
+  if(is.null(exp_type)) stop('Could not find the requested experiment in neither main nor alternate experiments !')
   if(exp_type == 'main') {
     if (!assay %in% expassay.check[['main']][['assay']]) stop('Requested assay does not exist for the main experiment !')
   }
   if(exp_type == 'alt') {
     if(!assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested assay does not exist for the requested alternate experiment !')
   }
+  
   
   message('Exp type : ', exp_type)
   ## Setting out_dir
