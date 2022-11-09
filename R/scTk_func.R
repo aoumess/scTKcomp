@@ -120,9 +120,11 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = 'RNA'
   sobj@metadata <- mymeta
   
   ## File output
-  if (out_rds == 'auto') out_rds <- paste0(out_dir, '/', paste(c(sample_name, sprintf('%02d', sobj@metadata$misc$id), 'raw_SCE.RDS'), collapse = '_'))
+  if(is.null(out_rds)) {
+    message('Saving RDS ...')
+    if (out_rds == 'auto') out_rds <- paste0(out_dir, '/', paste(c(sample_name, sprintf('%02d', sobj@metadata$misc$id), 'raw_SCE.RDS'), collapse = '_'))
   saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
-  
+  }
   ## Return data ?
   if (return_data) return(sobj)
 }
@@ -132,10 +134,18 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = 'RNA'
 
 
 ## SCE OBJECT DESCRIPTION
-scTK_descriptor <- function(in_rds = NULL, max_levels = 100, return_data = FALSE) {
+## in_rds         [char]      Path to a SCE object saved as a RDS
+## max_levels     [int>0]     Maximal number of unique values to consider a barcode annotation as a factor rather than a continuous numeric vector
+## describe       ['all', 'assays', 'dimred', 'coldata']    Type of entries to describe
+scTK_descriptor <- function(in_rds = NULL, describe = 'all', max_levels = 100, return_data = FALSE) {
   ## Checks
   if (is.null(in_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
   if(!file.exists(in_rds)) stop('Provided RDS not found !')
+  
+  describe <- tolower(describe)
+  desc.valids <- c('all', 'assay', 'dimred', 'coldata')
+  if(!all(describe %in% desc.valids)) stop('At least one requested item type to describe is not valid. Expecting any combination of ["', paste(c(desc.valids), collapse = '", "'), '] ("all" supersedes any other).')
+  if(describe == 'all') describe <- desc.valids[-1]
   
   ## Loading SCE
   message('Loading SCE object ...')
@@ -151,13 +161,17 @@ scTK_descriptor <- function(in_rds = NULL, max_levels = 100, return_data = FALSE
     ### EXPERIMENT NAME
     message('EXPERIMENT : [', SingleCellExperiment::mainExpName(sobj), '] (main)')
     ### ASSAYS
-    expassays <- SummarizedExperiment::assays(x = sobj)
-    for (ea in seq_along(expassays)) message('\tASSAY ', ea, ' : [', names(expassays)[ea], ']\t[', nrow(expassays[[ea]]), ' x ', ncol(expassays[[ea]]), ']\t[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == names(expassays)[ea]], ']')
+    if('assay' %in% describe) {
+      expassays <- SummarizedExperiment::assays(x = sobj)
+      for (ea in seq_along(expassays)) message('\tASSAY ', ea, ' : [', names(expassays)[ea], ']  Dims:[', nrow(expassays[[ea]]), ' x ', ncol(expassays[[ea]]), ']  Range:[', paste(sprintf('%.2f', range(expassays[[ea]], na.rm = TRUE)), collapse = '-'), ']  Type:[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == names(expassays)[ea]], ']')
+    }
     ### DIMRED
-    dimreds <- SingleCellExperiment::reducedDims(x = sobj)
-    for (dr in seq_along(dimreds)) message('\tDIMRED ', dr, ' : [', names(dimreds)[dr], ']\t[', nrow(dimreds[[dr]]), ' x ', ncol(dimreds[[dr]]), ']')
-  } else retlist[['main']] <- list(name = SingleCellExperiment::mainExpName(sobj),
-                                   assay = names(sobj@assays))
+    if ('dimred' %in% describe) {
+      dimreds <- SingleCellExperiment::reducedDims(x = sobj)
+      for (dr in seq_along(dimreds)) message('\tDIMRED ', dr, ' : [', names(dimreds)[dr], ']  Dims:[', nrow(dimreds[[dr]]), ' x ', ncol(dimreds[[dr]]), ']')
+    } else retlist[['main']] <- list(name = SingleCellExperiment::mainExpName(sobj),
+                                     assay = names(sobj@assays))
+  }
   
   ## Alt exp
   alt.names <- SingleCellExperiment::altExpNames(sobj)
@@ -165,12 +179,14 @@ scTK_descriptor <- function(in_rds = NULL, max_levels = 100, return_data = FALSE
     if(!return_data) {
       message('EXPERIMENT : [', alt.names[en], '] (alt)')
       expassays <- names(SingleCellExperiment::altExp(x = sobj, e = alt.names[en])@assays)
-      for (ea in seq_along(expassays)) message('\tASSAY ', ea, ' : [', expassays[ea], ']\t[', nrow(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ' x ', ncol(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ']\t[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == expassays[ea]], ']')
+      if('assay' %in% describe) {
+        for (ea in seq_along(expassays)) message('\tASSAY ', ea, ' : [', expassays[ea], ']  Dims:[', nrow(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ' x ', ncol(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ']  Range:[', paste(sprintf('%.2f', range(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea]), na.rm = TRUE)), collapse = '-'), ']  Type:[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == expassays[ea]], ']')
+      }
     } else retlist[['alt']][[alt.names[en]]] <- names(SingleCellExperiment::altExp(x = sobj, e = alt.names[en])@assays)
   }
   
   ### BARCODE META
-  if(!return_data) {
+  if(!return_data & 'coldata' %in% describe) {
     bc.df <- as.data.frame(sobj@colData)
     message('BARCODES METADATA :')
     for (b in seq_len(ncol(bc.df))) {
@@ -187,7 +203,6 @@ scTK_descriptor <- function(in_rds = NULL, max_levels = 100, return_data = FALSE
       }
     }
   }
-  
   if(return_data) return(retlist)
 }
 
@@ -319,6 +334,7 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
   
   ## File output
   if(!is.null(out_rds)) {
+    message('Saving RDS ...')
     if(out_rds == 'auto') out_rds <- paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), 'EDf.RDS'), collapse = '_'))
     saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
   }
@@ -404,6 +420,7 @@ scTK_cc_seurat <- function(in_rds = NULL, assay = 'counts', cc_seurat_file = NUL
   ## File output
   message('Saving results ...')
   if (!is.null(out_rds)) {
+    message('Saving RDS ...')
     out_rds <- if(out_rds == 'auto') paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), assay, 'CC.seurat.RDS'), collapse = '_'))
     saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
   }
@@ -511,6 +528,7 @@ scTK_scSG <- function(in_rds = NULL, exp_name = NULL, raw_assay = 'counts', norm
   
   ## File output
   if(!is.null(out_rds)) {
+    message('Saving RDS ...')
     if(out_rds == 'auto') out_rds <- paste0(out_root, '.RDS')
     saveRDS(object = sobj, file = out_rds, compress = "bzip2")
   }
@@ -623,7 +641,7 @@ scTK_assess_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', 
   
   ## Center / scale ?
   if (any(c(center, scale))) {
-    message('Centering and/or scaling ...')
+    message('Centering and/or scaling data ...')
     mat <- base::scale(x = mat, center = center, scale = scale)
   }
   ## Dimension reduction
@@ -699,6 +717,9 @@ scTK_assess_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', 
 # scTK_assess_covar(in_rds = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/DATASETS/PAIVA/20221107/PAIVA_02d_SLN2K.rds', exp_name = 'SLN2K', assay = 'SLN2K', factor_names = c('cc_seurat.Phase'), conti_names = c('subsets_Ribo_percent', 'subsets_Stress_percent', 'subsets_Mito_percent', 'cc_seurat.SmG2M.Score'), ctrl_features = c('Gapdh'), marker_features = c('Il2ra', 'Plac8', 'Ly6d', 'Ccr7', 'Itm2a', 'C1qb', 'Hmgn2'), ndim_max = 25)
 
 
+# system.time(scTK_assess_covar(in_rds = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/DATASETS/PAIVA/GSE160135_RAW/G3_02c_SLNst2K.rds', , exp_name = 'SLNst2K', assay = 'SLNst2K', factor_names = c('cc_seurat.Phase'), conti_names = c('log_nCount', 'log_nFeature', 'subsets_Ribo_percent', 'subsets_StressA_percent', 'subsets_Mito_percent', 'cc_seurat.SmG2M.Score'), ctrl_features = c('Gapdh'), marker_features = c('Il2ra', 'Plac8', 'Ly6d', 'Ccr7', 'Itm2a', 'C1qb', 'Hmgn2', 'Cd28', 'Slc3a2', 'Cd69'), ndim_max = 10))
+
+
 ## REGRESS COVARIATES
 ### in_rds            [char]        Path to the SCE object save as RDS to read. Default [NULL]
 ### exp               [char|NULL]   Name of the SCE experiment to use. If NULL, the default main experiment will be used. Default ['counts'].
@@ -710,12 +731,12 @@ scTK_assess_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', 
 ### conti_scale       [bool]        Perform scaling of continuous covariates before regression (if 'conti_names' is not NULL). Highly recommended, especially when multiple continuous covariates of highly variable distributions are used. Default [TRUE]
 ### out_rds           ['auto'|char|NULL]    Path+name.RDS of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
 ### return_data       [logical]   Should the SCE object be returned by the function ? Default [FALSE].
-scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', model_use = 'linear', factor_names = NULL, conti_names = NULL, conti_scale = TRUE, scale_data = TRUE, scale_limit = 10, out_rds = 'auto', return_data = FALSE) {
+scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', model_use = 'linear', factor_names = NULL, conti_names = NULL, conti_scale = TRUE, scale_residuals = TRUE, scale_limit = 10, center_residuals = TRUE, out_rds = 'auto', return_data = FALSE) {
   
   ## FORCE NO SUBSET
   feature_subset <- NULL
   
-  ## Parameter checks
+  ## Parameters checks
   message('Checks ...')
   if (is.null(in_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
   if(!file.exists(in_rds)) stop('Provided RDS not found !')
@@ -733,7 +754,12 @@ scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts',
   ## Checking if requested exp and assay (and feature subset) exist
   expassay.check <- suppressMessages(scTK_descriptor(in_rds = in_rds, return_data = TRUE))
   exp_type = NULL
-  exp_type <- if(is.null(exp_name)) 'main' else if (exp_name == SingleCellExperiment::mainExpName(sobj)) 'main' else if (exp_name %in% names(expassay.check$alt)) 'alt' else stop('Requested experiment does not exist !')
+  if(is.null(exp_name)) {
+    if (is.null(expassay.check$main$name)) exp_type <- 'main'
+  } else {
+    if (exp_name %in% names(expassay.check$alt)) exp_type <- 'alt'
+  }
+  if(is.null(exp_type)) stop('Could not find the requested experiment in neither main nor alternate experiments !')
   if(exp_type == 'main') {
     if (!assay %in% expassay.check[['main']][['assay']]) stop('Requested assay does not exist for the main experiment !')
   }
@@ -800,17 +826,17 @@ scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts',
   dimnames(data.resid) <- dimnames(scmat)
   
   ## Scaling ?
-  if (scale_data) data.resid <- FastRowScale(mat = data.resid, center = TRUE, scale = TRUE, scale_max = scale_limit)
+  if (scale_residuals) data.resid <- Seurat:::FastRowScale(mat = data.resid, center = center_residuals, scale = TRUE, scale_max = scale_limit)
   
   # ## Adding regressed matrix to the object
-  # newname <- paste(c(paste(c(assay, if(!is.null(feature_subset)) 'sub' else NULL, 'R'), collapse = '_'), if(scale_data) 'S' else NULL), collapse = '')
+  # newname <- paste(c(paste(c(assay, if(!is.null(feature_subset)) 'sub' else NULL, 'R'), collapse = '_'), if(scale_residuals) 'S' else NULL), collapse = '')
   # if(!is.null(feature_subset)) SingleCellExperiment::altExp(x = sobj, e = newname) <-  SingleCellExperiment::altExp(x = sobj, e = feature_subset) else SingleCellExperiment::altExp(x = sobj, e = newname) <-  SingleCellExperiment::altExp(x = sobj, e = assay)
   # SummarizedExperiment::assayNames(SingleCellExperiment::altExp(x = sobj, e = newname)) <- newname
   # SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = newname), i = newname) <- data.resid
   # rm(data.resid)
   
   ## Inserting into the SCE
-  newname <- paste(c(paste(c(assay, if(!is.null(feature_subset)) 'sub' else NULL, 'R'), collapse = '_'), if(scale_data) 'S' else NULL), collapse = '')
+  newname <- paste(c(paste(c(assay, if(!is.null(feature_subset)) 'sub' else NULL, 'R'), collapse = '_'), if(scale_residuals) 'S' else NULL), collapse = '')
   assaylist <- list(assay = data.resid)
   names(assaylist) <- newname
   SingleCellExperiment::altExp(x = sobj, e = newname) <- SingleCellExperiment::SingleCellExperiment(assays = assaylist, mainExpName = newname)
@@ -822,6 +848,7 @@ scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts',
   
   ## File output
   if(!is.null(out_rds)) {
+    message('Saving RDS ...')
     out_name <- paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), model_use, exp_name, assay, 'REG'), collapse = '_')
     if(out_rds == 'auto') out_rds <- paste0(out_dir, '/', out_name, '.RDS')
     saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
@@ -851,17 +878,17 @@ NBResiduals <- function (fmla, regression.mat, gene) {
   return(resid)
 }
 
-## Scaling function from Seurat
-FastRowScale <- function (mat, center = TRUE, scale = TRUE, scale_max = 10) {
-  if (center) rm <- matrixStats::rowMeans2(x = mat, na.rm = TRUE)
-  if (scale) {
-    rsd <- if (center) matrixStats::rowSds(mat, center = rm) else sqrt(x = rowSums2(x = mat^2)/(ncol(x = mat) - 1))
-  }
-  if (center) mat <- mat - rm
-  if (scale) mat <- mat/rsd
-  if (scale_max != Inf) mat[mat > scale_max] <- scale_max
-  return(mat)
-}
+# ## Scaling function from Seurat
+# FastRowScale <- function (mat, center = TRUE, scale = TRUE, scale_max = 10) {
+#   if (center) rm <- matrixStats::rowMeans2(x = mat, na.rm = TRUE)
+#   if (scale) {
+#     rsd <- if (center) matrixStats::rowSds(mat, center = rm) else sqrt(x = rowSums2(x = mat^2)/(ncol(x = mat) - 1))
+#   }
+#   if (center) mat <- mat - rm
+#   if (scale) mat <- mat/rsd
+#   if (scale_max != Inf) mat[mat > scale_max] <- scale_max
+#   return(mat)
+# }
 
 
 HVG_Statistic2 <- function (object, First_time_unsupervised_clustering_label = "First_time_unsupervised_clustering", nfeatures = 2000) {
