@@ -28,11 +28,16 @@ scTK_launch <- function() {
   singleCellTK()
 }
 
+scTK_recompress <- function(in_sobj = NULL, compress = 'bzip2') {
+  sobj <- readRDS(in_sobj)
+  message('Recompressing [', in_sobj, '] ...')
+  saveRDS(object = sobj, file = in_sobj, compress = 'bzip2')
+}
 ## LOAD 10X / BUStools / Alevin / UMI-tools DATA TO SingleCellExperiment OBJECT, SAVE IT ON DISK AND/OR RETURN IT
 ### data_path       [char]    Path to SC data (10X, BUStools, Alevin, or UMI-tools). If input data come from BUStools or UMI-tools, this path should also contain the rootname of the generated files. Default [NULL]
 ### sample_name     [char]    Name to give for the loaded data. Default ['SAMPLE']
 ### exp_name        [char]    The main Experiment name to set for the output SCE object (see ?SingleCellExperiment::mainExpName). Default ['RNA'].
-### out_rds         ['auto'|char|NULL]    Path+name.RDS of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
+### out_rds         ['auto'|char|NULL]    Path+name.rds of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
 ### return_data     [logic]   Should the SCE object be returned by the function ? Default [FALSE].
 scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = 'RNA', out_rds = 'auto', return_data = FALSE) {
   
@@ -122,7 +127,7 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = 'RNA'
   ## File output
   if(is.null(out_rds)) {
     message('Saving RDS ...')
-    if (out_rds == 'auto') out_rds <- paste0(out_dir, '/', paste(c(sample_name, sprintf('%02d', sobj@metadata$misc$id), 'raw_SCE.RDS'), collapse = '_'))
+    if (out_rds == 'auto') out_rds <- paste0(out_dir, '/', paste(c(sample_name, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), 'raw_SCE.rds'), collapse = '_'))
   saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
   }
   ## Return data ?
@@ -137,7 +142,7 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = 'RNA'
 ## in_rds         [char]      Path to a SCE object saved as a RDS
 ## max_levels     [int>0]     Maximal number of unique values to consider a barcode annotation as a factor rather than a continuous numeric vector
 ## describe       ['all', 'assays', 'dimred', 'coldata']    Type of entries to describe
-scTK_descriptor <- function(in_rds = NULL, describe = 'all', max_levels = 100, return_data = FALSE) {
+scTK_descriptor <- function(in_rds = NULL, describe = 'all', max_levels = 100, assay_plot = FALSE, out_dir = 'auto', return_data = FALSE) {
   ## Checks
   if (is.null(in_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
   if(!file.exists(in_rds)) stop('Provided RDS not found !')
@@ -154,23 +159,41 @@ scTK_descriptor <- function(in_rds = NULL, describe = 'all', max_levels = 100, r
   ## Additional checks on sobj
   if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
   
+  if (assay_plot) {
+    if(out_dir == 'auto') out_dir <- dirname(in_rds)
+    rootname <- sub(pattern = '.rds', replacement = '', x = basename(in_rds), ignore.case = TRUE)
+  } 
   retlist <- list()
+  samplename <- if(is.list(sobj@metadata$misc[[1]])) paste(vapply(sobj@metadata$misc, function(x) x$samplename, "a"), collapse = '.') else sobj@metadata$misc$samplename
   
   ## MAIN EXPERIMENT
   if(!return_data) {
     ### EXPERIMENT NAME
-    message('EXPERIMENT : [', SingleCellExperiment::mainExpName(sobj), '] (main)')
+    exp_name <- SingleCellExperiment::mainExpName(sobj)
+    message('EXPERIMENT : [', exp_name, '] (main)')
     ### ASSAYS
     if('assay' %in% describe) {
       expassays <- SummarizedExperiment::assays(x = sobj)
-      for (ea in seq_along(expassays)) message('\tASSAY ', ea, ' : [', names(expassays)[ea], ']  Dims:[', nrow(expassays[[ea]]), ' x ', ncol(expassays[[ea]]), ']  Range:[', paste(sprintf('%.2f', range(expassays[[ea]], na.rm = TRUE)), collapse = '-'), ']  Type:[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == names(expassays)[ea]], ']')
+      for (ea in seq_along(expassays)) {
+        assay_name <- names(expassays)[ea]
+        message('\tASSAY ', ea, ' : [', assay_name, ']  Dims:[', nrow(expassays[[ea]]), ' x ', ncol(expassays[[ea]]), ']  Range:[', paste(sprintf('%.2f', range(expassays[[ea]], na.rm = TRUE)), collapse = '-'), ']  Type:[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == assay_name], ']')
+        if (assay_name == 'counts') {
+          stbl <- table(as.vector(expassays[[ea]] == 0))
+          splev <- 1 - (stbl[1] / sum(stbl))
+          message('\t\tSparsity level : ', sprintf('%.2f', splev * 100), '%')
+        }
+        if(assay_plot) {
+          png(paste0(out_dir, '/', paste(c(rootname, exp_name, assay_name))))
+          plot3D::persp3D(z=log(as.matrix(SummarizedExperiment::assay(x = sobj, i = assay_name))+1), xlab = 'Features', ylab = 'Cells', zlab = "Value", main = assay_name)
+          dev.off()
+        }
+      }
     }
     ### DIMRED
     if ('dimred' %in% describe) {
       dimreds <- SingleCellExperiment::reducedDims(x = sobj)
       for (dr in seq_along(dimreds)) message('\tDIMRED ', dr, ' : [', names(dimreds)[dr], ']  Dims:[', nrow(dimreds[[dr]]), ' x ', ncol(dimreds[[dr]]), ']')
-    } else retlist[['main']] <- list(name = SingleCellExperiment::mainExpName(sobj),
-                                     assay = names(sobj@assays))
+    } else retlist[['main']] <- list(name = SingleCellExperiment::mainExpName(sobj), assay = names(sobj@assays))
   }
   
   ## Alt exp
@@ -180,7 +203,14 @@ scTK_descriptor <- function(in_rds = NULL, describe = 'all', max_levels = 100, r
       message('EXPERIMENT : [', alt.names[en], '] (alt)')
       expassays <- names(SingleCellExperiment::altExp(x = sobj, e = alt.names[en])@assays)
       if('assay' %in% describe) {
-        for (ea in seq_along(expassays)) message('\tASSAY ', ea, ' : [', expassays[ea], ']  Dims:[', nrow(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ' x ', ncol(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ']  Range:[', paste(sprintf('%.2f', range(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea]), na.rm = TRUE)), collapse = '-'), ']  Type:[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == expassays[ea]], ']')
+        for (ea in seq_along(expassays)) {
+          message('\tASSAY ', ea, ' : [', expassays[ea], ']  Dims:[', nrow(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ' x ', ncol(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ']  Range:[', paste(sprintf('%.2f', range(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea]), na.rm = TRUE)), collapse = '-'), ']  Type:[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == expassays[ea]], ']')
+          if(assay_plot) {
+            png(paste0(out_dir, '/', paste(c(rootname, exp_name, assay_name))))
+            plot3D::persp3D(z=log(as.matrix(SingleCellExperiment::altExp(x = sobj, e = SummarizedExperiment::assay(x = sobj, i = assay_name)))+1), xlab = 'Features', ylab = 'Cells', zlab = "Value", main = assay_name)
+            dev.off()
+          }
+        }
       }
     } else retlist[['alt']][[alt.names[en]]] <- names(SingleCellExperiment::altExp(x = sobj, e = alt.names[en])@assays)
   }
@@ -212,9 +242,9 @@ scTK_descriptor <- function(in_rds = NULL, describe = 'all', max_levels = 100, r
 ### droplets_min        [int>>0]      Minimum number of barcodes found in the input SCE object. This is a lose flag to avoid filtering empty droplets on a dataset already filtered for those. The value should be fat superior to the expected amount of cells. Default [1E+04]
 ### emptydrops_fdr      [0<num<<1]    Maximum p-value from the emptyDrops test to consider a droplet as non-empty. Default [1E-03].
 ### emptydrops_retain   [char]        Minimum UMI count above which all barcodes are assumed to contain cells (see ?DropletUtils::emptyDrops). Default [NULL] (ie, no minimum value)
-### my.seed             [int>0]       Seed used to start the RNG. Default [1337]
+### my_seed             [int>0]       Seed used to start the RNG. Default [1337]
 ### draw_plots          [logic]       Should metric plots be drawn ? Default [TRUE]
-### out_rds             ['auto'|char|NULL]    Path+name.RDS of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
+### out_rds             ['auto'|char|NULL]    Path+name.rds of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
 ### return_data         [logical]     Should the SCE object be returned by the function ? Default [FALSE].
 scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, emptydrops_fdr = 1E-03, emptydrops_retain = NULL, my_seed = 1337, draw_plots = TRUE, out_rds = 'auto', return_data = FALSE) {
   
@@ -334,8 +364,9 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
   
   ## File output
   if(!is.null(out_rds)) {
+    samplename <- if(is.list(sobj@metadata$misc[[1]])) paste(vapply(sobj@metadata$misc, function(x) x$samplename, "a"), collapse = '.') else sobj@metadata$misc$samplename
     message('Saving RDS ...')
-    if(out_rds == 'auto') out_rds <- paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), 'EDf.RDS'), collapse = '_'))
+    if(out_rds == 'auto') out_rds <- paste0(out_dir, '/', paste(c(samplename, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), 'EDf.rds'), collapse = '_'))
     saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
   }
   
@@ -344,8 +375,66 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
 }
 
 ## scTK_edf() EXXAMPLE
-# scTK_edf(in_rds = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/10X_DATASET_1kPBMC_CR3v3/COUNT_MATRIX/pbmc_1k_v3_raw_feature_bc_matrix/PBMC1K10X_raw.RDS')
+# scTK_edf(in_rds = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/10X_DATASET_1kPBMC_CR3v3/COUNT_MATRIX/pbmc_1k_v3_raw_feature_bc_matrix/PBMC1K10X_raw.rds')
 
+
+## CREATE A QUICK AND DIRTY 2D UMAP
+scTK_QnDuMAP <- function(in_rds = NULL, exp_name = NULL, assay = 'SLN', pca_comp = 10, my_seed = 1337, return_data = FALSE) {
+  
+  message('Checks ...')
+  ### Mandatory
+  if (is.null(in_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
+  if(!file.exists(in_rds)) stop('Provided RDS not found !')
+  if(!is.character(assay)) stop('Assay name should be a character (string)')
+  if(pca_comp <= 0) stop('[pca_comp] should be a non-null positive integer (and <= N cells).')
+  
+  ## Loading sobj
+  message('Loading SCE object ...')
+  sobj <- readRDS(in_rds)
+  
+  ## Additional checks on sobj
+  if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
+  
+  ## Checking if requested exp and assay (and feature subset) exist
+  expassay.check <- suppressMessages(d2(sobj))
+  ## Setting type of experience
+  exp_type = NULL
+  if(is.null(exp_name)) {
+    if (is.null(expassay.check$main$name)) exp_type <- 'main'
+  } else {
+    if (exp_name %in% names(expassay.check$alt)) exp_type <- 'alt'
+  }
+  if(is.null(exp_type)) stop('Could not find the requested experiment in neither main nor alternate experiments !')
+  if(exp_type == 'main') {
+    if (!assay %in% expassay.check[['main']][['assay']]) stop('Requested assay does not exist for the main experiment !')
+  }
+  if(exp_type == 'alt') {
+    if(!assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested assay does not exist for the requested alternate experiment !')
+  }
+  
+  message('Exp type : ', exp_type)
+  ## Setting out_dir
+  out_dir <- dirname(in_rds)
+  
+  ## Loading data 
+  scmat <- if(exp_type == 'main') SummarizedExperiment::assay(x = sobj, i = assay) else SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = exp_name), i = assay)
+  
+  ## Compute quick UMPA with scater
+  message("Generating a quick'n dirty uMAP ...")
+  set.seed(my_seed)
+  umap <- scater::calculateUMAP(x = scmat, pca = pca_comp, ntop = nrow(scmat))
+  rm(scmat)
+  
+  ## Adding to sobj
+  SingleCellExperiment::reducedDim(x = sobj, type = paste0('QnD_', assay)) <- umap
+  rm(umap)
+  
+  ## Saving obj
+  message('Saving to RDS ...')
+  saveRDS(object = sobj, file = in_rds, compress = 'bzip2')
+  
+  if(return_data) return(sobj)
+}
 
 ## ESTIMATE CELL CYCLE USING THE SEURAT METHOD
 ### in_rds            [char]      Path to the SCE object save as RDS to read. Default [NULL]
@@ -353,7 +442,7 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
 ### assay             [char]      Name of the SCE assay to use (ie, the matrix level). Default ['counts'].
 ### cc_seurat_file    [char]      Path+Name to a RDS file that contains gene lists used to score the cell cycle phases. Default [NULL]
 ### nbin              [int>0]     Number of bins of aggregate expression levels for all analyzed features (see ?Seurat::AddModuleScore). Default [24]
-### out_rds           ['auto'|char|NULL]    Path+name.RDS of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
+### out_rds           ['auto'|char|NULL]    Path+name.rds of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
 ### return_data       [logical]   Should the SCE object be returned by the function ? Default [FALSE].
 scTK_cc_seurat <- function(in_rds = NULL, assay = 'counts', cc_seurat_file = NULL, nbin = 24, out_rds = 'auto', return_data = FALSE) {
   
@@ -421,7 +510,8 @@ scTK_cc_seurat <- function(in_rds = NULL, assay = 'counts', cc_seurat_file = NUL
   message('Saving results ...')
   if (!is.null(out_rds)) {
     message('Saving RDS ...')
-    out_rds <- if(out_rds == 'auto') paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), assay, 'CC.seurat.RDS'), collapse = '_'))
+    samplename <- if(is.list(sobj@metadata$misc[[1]])) paste(vapply(sobj@metadata$misc, function(x) x$samplename, "a"), collapse = '.') else sobj@metadata$misc$samplename
+    out_rds <- if(out_rds == 'auto') paste0(out_dir, '/', paste(c(samplename, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), assay, 'CC.seurat.rds'), collapse = '_'))
     saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
   }
   ## Return data ?
@@ -429,11 +519,11 @@ scTK_cc_seurat <- function(in_rds = NULL, assay = 'counts', cc_seurat_file = NUL
 }
 
 ## scTK_cc_seurat() EXAMPLE
-# scTK_cc_seurat(in_rds = readRDS('/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/10X_DATASET_1kPBMC_CR3v3/COUNT_MATRIX/pbmc_1k_v3_raw_feature_bc_matrix/PBMC1K10X.RDS'), cc_seurat_file = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/RESOURCES/GENELISTS/homo_sapiens_Seurat_cc.genes_20191031.rds')
+# scTK_cc_seurat(in_rds = readRDS('/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/10X_DATASET_1kPBMC_CR3v3/COUNT_MATRIX/pbmc_1k_v3_raw_feature_bc_matrix/PBMC1K10X.rds'), cc_seurat_file = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/RESOURCES/GENELISTS/homo_sapiens_Seurat_cc.genes_20191031.rds')
 
 
 ## scTK_cc_cyclone() EXAMPLE
-# scTK_cc_cyclone(in_rds = readRDS('/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/10X_DATASET_1kPBMC_CR3v3/COUNT_MATRIX/pbmc_1k_v3_raw_feature_bc_matrix/PBMC1K10X_cc.seurat.RDS'), cc_cyclone_file = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/RESOURCES/GENELISTS/homo_sapiens_cyclone_pairs_symbols_20191001.rds')
+# scTK_cc_cyclone(in_rds = readRDS('/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/10X_DATASET_1kPBMC_CR3v3/COUNT_MATRIX/pbmc_1k_v3_raw_feature_bc_matrix/PBMC1K10X_cc.seurat.rds'), cc_cyclone_file = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/RESOURCES/GENELISTS/homo_sapiens_cyclone_pairs_symbols_20191001.rds')
 
 
 ## GET SENSITIVE GENES INSTEAD OF SEURAT HVG
@@ -493,7 +583,8 @@ scTK_scSG <- function(in_rds = NULL, exp_name = NULL, raw_assay = 'counts', norm
   
   sobj@metadata$misc$id <- sobj@metadata$misc$id +1
   if(!is.null(out_rds)) {
-    out_root <- if(out_rds == 'auto') paste0(dirname(in_rds), '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), paste0('SG', n_features)), collapse = '_')) else out_root <- sub(pattern = '.rds$', replacement = '', x = out_rds, ignore.case = TRUE)
+    samplename <- if(is.list(sobj@metadata$misc[[1]])) paste(vapply(sobj@metadata$misc, function(x) x$samplename, "a"), collapse = '.') else sobj@metadata$misc$samplename
+    out_root <- if(out_rds == 'auto') paste0(dirname(in_rds), '/', paste(c(samplename, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), paste0('SG', n_features)), collapse = '_')) else out_root <- sub(pattern = '.rds$', replacement = '', x = out_rds, ignore.case = TRUE)
   }
   
   ## Variance plot for Seurat HVGs
@@ -535,7 +626,7 @@ scTK_scSG <- function(in_rds = NULL, exp_name = NULL, raw_assay = 'counts', norm
   ## File output
   if(!is.null(out_rds)) {
     message('Saving RDS ...')
-    if(out_rds == 'auto') out_rds <- paste0(out_root, '.RDS')
+    if(out_rds == 'auto') out_rds <- paste0(out_root, '.rds')
     saveRDS(object = sobj, file = out_rds, compress = "bzip2")
   }
   
@@ -566,7 +657,7 @@ scTK_assess_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', 
   if(!file.exists(in_rds)) stop('Provided RDS not found !')
   if(!is.character(assay)) stop('Assay name should be a character (string)')
   if(all(is.null(c(factor_names, conti_names, ctrl_features, marker_features)))) stop('At least one of [factor_names], [conti.colnames], [ctrl_features] or [marker_features] should not be NULL.')
-  if(ndim_max <= 0) stop('[ndim_max] should be a non-null positive integer (and <= s samples).')
+  if(ndim_max <= 0) stop('[ndim_max] should be a non-null positive integer (and <= N cells).')
   if(!tolower(red_method) %in% c('pca', 'mds.euc', 'mds.spear')) stop('Unknown or unsupported dimension reduction method')
   if(tolower(out_png) != 'auto' & !dir.exists(dirname(out_png))) stop('Provided path for "out_png" does not exist !')
   
@@ -717,14 +808,17 @@ scTK_assess_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', 
                                    row_title = 'Dimensions',
                                    column_split = cf.types,
                                    top_annotation = ComplexHeatmap::HeatmapAnnotation(Type = cf.types, col = list(Type = setNames(object = c('blue', 'lightblue', 'pink', 'red'), nm = c('C.factor', 'C.continuous', 'F.control', 'F.marker')))))
-  if(tolower(out_png) == 'auto') out_png <- paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), exp_name, assay, 'covar.png'), collapse = '_'))
+  if(tolower(out_png) == 'auto'){
+    samplename <- if(is.list(sobj@metadata$misc[[1]])) paste(vapply(sobj@metadata$misc, function(x) x$samplename, "a"), collapse = '.') else sobj@metadata$misc$samplename
+    out_png <- paste0(out_dir, '/', paste(c(samplename, sprintf('%02d', sobj@metadata$misc$id), exp_name, assay, 'covar.png'), collapse = '_'))
+  }
   png(filename = out_png, width = 400+(50*length(cf.names)), height = 1000)
   ComplexHeatmap::draw(BC.hm)
   dev.off()
 }
 
 ## scTK_assess_covar() EXAMPLE
-# scTK_assess_covar(rds_in = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/TEST_DATASET/ANALYSIS/testRDS.RDS', assay = 'SoupX', factor_names = c('hsn', 'cc_seurat.Phase'), conti_names = c('log_nCount_RNA', 'log_nFeature_RNA', 'soupX_nUMIs', 'subsets_Ribo_percent', 'subsets_Stress_percent', 'subsets_Mito_percent', 'cc_seurat.SmG2M.Score'), ctrl_features = c('Gapdh'), marker_features = c('Il2ra', 'Cd8b1', 'Cd8a', 'Cd4', 'Ccr7', 'Itm2a', 'Aif1', 'Hba-a1'), ndim_max = 25)
+# scTK_assess_covar(rds_in = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/TEST_DATASET/ANALYSIS/testRDS.rds', assay = 'SoupX', factor_names = c('hsn', 'cc_seurat.Phase'), conti_names = c('log_nCount_RNA', 'log_nFeature_RNA', 'soupX_nUMIs', 'subsets_Ribo_percent', 'subsets_Stress_percent', 'subsets_Mito_percent', 'cc_seurat.SmG2M.Score'), ctrl_features = c('Gapdh'), marker_features = c('Il2ra', 'Cd8b1', 'Cd8a', 'Cd4', 'Ccr7', 'Itm2a', 'Aif1', 'Hba-a1'), ndim_max = 25)
 
 # scTK_assess_covar(in_rds = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/DATASETS/PAIVA/20221107/PAIVA_02d_SLN2K.rds', exp_name = 'SLN2K', assay = 'SLN2K', factor_names = c('cc_seurat.Phase'), conti_names = c('subsets_Ribo_percent', 'subsets_Stress_percent', 'subsets_Mito_percent', 'cc_seurat.SmG2M.Score'), ctrl_features = c('Gapdh'), marker_features = c('Il2ra', 'Plac8', 'Ly6d', 'Ccr7', 'Itm2a', 'C1qb', 'Hmgn2'), ndim_max = 25)
 
@@ -741,7 +835,7 @@ scTK_assess_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', 
 ### factor_names      [vec(char)]   Vector of column name(s) corresponding to factor covariate(s) to regress. Default [NULL]
 ### conti_names       [vec(char)]   Vector of column name(s) corresponding to continuous contiate(s) to regress. Default [NULL]
 ### conti_scale       [bool]        Perform scaling of continuous covariates before regression (if 'conti_names' is not NULL). Highly recommended, especially when multiple continuous covariates of highly variable distributions are used. Default [TRUE]
-### out_rds           ['auto'|char|NULL]    Path+name.RDS of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
+### out_rds           ['auto'|char|NULL]    Path+name.rds of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
 ### return_data       [logical]   Should the SCE object be returned by the function ? Default [FALSE].
 scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', model_use = 'linear', factor_names = NULL, conti_names = NULL, conti_scale = TRUE, scale_residuals = TRUE, scale_limit = 10, center_residuals = TRUE, out_rds = 'auto', return_data = FALSE) {
   
@@ -861,8 +955,9 @@ scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts',
   ## File output
   if(!is.null(out_rds)) {
     message('Saving RDS ...')
-    out_name <- paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), model_use, exp_name, assay, 'REG'), collapse = '_')
-    if(out_rds == 'auto') out_rds <- paste0(out_dir, '/', out_name, '.RDS')
+    samplename <- if(is.list(sobj@metadata$misc[[1]])) paste(vapply(sobj@metadata$misc, function(x) x$samplename, "a"), collapse = '.') else sobj@metadata$misc$samplename
+    out_name <- paste(c(samplename, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), model_use, exp_name, assay, 'REG'), collapse = '_')
+    if(out_rds == 'auto') out_rds <- paste0(out_dir, '/', out_name, '.rds')
     saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
     reg_table <- data.frame(Regressed.covariate = vars.to.regress, Type = vars.types)
     write.table(reg_table, file = paste0(out_dir, '/', out_name, '.tsv'), sep = '\t', quote = FALSE, row.names = FALSE)
@@ -876,7 +971,12 @@ scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts',
 # scTK_regress_covar(in_rds = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/DATASETS/BACON/ANALYSIS/SCE-221102_1441.rds', exp_name = 'counts_sub2K', assay = 'counts_sub2K', factor_names = 'hsn', out_rds = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/DATASETS/BACON/ANALYSIS/SCE-221102_1441_reg2.rds')
 # scTK_regress_covar(in_rds = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/DATASETS/BACON/ANALYSIS/BACON.SX_03_counts_CCfHS.rds', exp_name = NULL, assay = 'SeuratLogNormalize', feature_subset = 'counts_sub2K', factor_names = c('hsn', 'subsets_mm.ribo_percent'), out_rds = 'auto')
 
-## GLM regression using negative binomial model, from Seurat
+## Subsetting an SCE through its cell metadata, factors only (useful to remove contaminant clusters, by example)
+scTK_subset <- function(in_rds = NULL, exp_name = NULL, assay = NULL, coldata.factor = NULL, keep.level = NULL) {}
+
+
+
+## GLM regression using negative binomial model, from Seurat (SLOW!)
 NBResiduals <- function (fmla, regression.mat, gene) {
   fit <- 0
   try(fit <- MASS::glm.nb(formula = fmla, data = regression.mat), silent = TRUE)
@@ -978,6 +1078,20 @@ ReSelectVariableFeatures2 <- function (object = NULL, SensitiveGene = NULL, nfea
   return(object)
 }
 
+d2 <- function(sobj = NULL) {
+  ## Checks
+  if(!is(sobj)[1] == 'SingleCellExperiment') stop('Provided RDS is not a proper SingleCellExperiment object !')
+  retlist <- list()
+  ## MAIN EXP
+  expassays <- SummarizedExperiment::assayNames(x = sobj)
+  retlist[['main']] <- list(name = SingleCellExperiment::mainExpName(sobj), assay = SummarizedExperiment::assayNames(x = sobj))
+  ## ALT EXP
+  alt.names <- SingleCellExperiment::altExpNames(sobj)
+  for (en in seq_along(alt.names)) retlist[['alt']][[alt.names[en]]] <- names(SingleCellExperiment::altExp(x = sobj, e = alt.names[en])@assays)
+  ## RETURN
+  return(retlist)
+}
+
 ## Loading Bacon matrix
 # sampname <- 'BACONMAT'
 # bacondf <- data.table::fread(input = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/DATASETS/BACON/DOC/2018_Bacon_Charnock-Jones/DEMs/SLX-7632.XXXXXXXXXX.dge.txt.gz', sep = '\t', header = TRUE)
@@ -990,4 +1104,4 @@ ReSelectVariableFeatures2 <- function (object = NULL, SensitiveGene = NULL, nfea
 # tobj$hsn <- substr(x = colnames(tobj), start = 10, stop = 13)
 # sobj@metadata$misc$id = 1
 # sobj@metadata$misc$samplename <- sampname
-# saveRDS(object = tobj, file = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/DATASETS/BACON/DOC/2018_Bacon_Charnock-Jones/DEMs/BMAT.RDS', compress = 'bzip2')
+# saveRDS(object = tobj, file = '/home/job/WORKSPACE/ENCADREMENT/2022/EBAII_n1_2022/ATELIER_SC/DATASETS/BACON/DOC/2018_Bacon_Charnock-Jones/DEMs/BMAT.rds', compress = 'bzip2')
