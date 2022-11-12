@@ -14,11 +14,10 @@ Imports:
   ggplot2,
   Matrix,
   Seurat,
-  
 Suggests:
 biocViews: Software
 BugReports: https://github.com/aoumess/scTKcomp/issues
-Description: A supplementary package for singleCellTK, filling some gaps (empty droplets filtering, cell cycle scoring)
+Description: A supplementary package for singleCellTK, filling some gaps (empty droplets filtering, cell cycle scoring, ...).
 License: MIT + file LICENSE
 LazyData: false
 Byte-Compile: yes

@@ -989,6 +989,13 @@ scTK_SeuratUMAP <- function(in_rds = NULL, in_dimred = NULL, ndim_max = 10, out_
   if (return_data) return(sobj)
 }
 
+
+## Perform trajectory analysis using TinGa
+scTK_TinGa <- function(in_rds = NULL) {
+  
+}
+
+
 ## (Unexported function) Hack for scSensitiveGenes to support any number of features (was hardcoded to 2000 to compare to Seurat default)
 HVG_Statistic2 <- function (object, First_time_unsupervised_clustering_label = "First_time_unsupervised_clustering", nfeatures = 2000) {
   require("entropy")
