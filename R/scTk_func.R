@@ -43,7 +43,7 @@ scTK_recompress <- function(in_sobj = NULL, compress = 'bzip2') {
 ### exp_name        [char]    The main Experiment name to set for the output SCE object (see ?SingleCellExperiment::mainExpName). Default ['RNA'].
 ### out_rds         ['auto'|char|NULL]    Path+name.rds of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
 ### return_data     [logic]   Should the SCE object be returned by the function ? Default [FALSE].
-scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = 'RNA', out_rds = 'auto', return_data = FALSE) {
+scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = NULL, out_rds = 'auto', return_data = FALSE) {
   
   ## Checks
   if(is.null(sample_name)) stop('A sample name is required !')
@@ -54,25 +54,25 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = 'RNA'
   # if(file.exists(out_rds)) stop('The requested output rds file name already exists !')
   if(!is.character(exp_name)) stop('Experiment name should be a character (string)')
   if(!is.logical(return_data)) stop('The return_data parameter should be a logical (boolean)')
-  if(is.null(out_rds) & !return_data) stop('No "out_rds" ste to NULL and "return_data" set to FALSE : Nothing to do !')
+  if(is.null(out_rds) & !return_data) stop('"out_rds" set to NULL and "return_data" set to FALSE : Nothing to do !')
   
   if(out_rds != 'auto') out_dir <- dirname(out_rds)
   
   ## Loading data
-  message("Loading data ...")
   if(file.exists(paste0(data_path, "/matrix.mtx")) | file.exists(paste0(data_path, "/matrix.mtx.gz"))) {
     ### Cell Ranger
     message('Found CellRanger data.')
+    message("Loading data ...")
     scmat <- Seurat::Read10X(data_path)
     if ('Gene Expression' %in% names (scmat)) {
       message("Multiple matrices found. Keeping gene expression only")
       scmat <- scmat[['Gene Expression']]
     }
     if(out_rds == 'auto') out_dir <- data_path
-  # } else if(file.exists(paste0(data_path, "/", sample_name, ".mtx"))) {
   } else if(file.exists(paste0(data_path, ".mtx"))) {
     ### BUStools
     message('Found BUStools data.')
+    message("Loading data ...")
     library(Matrix)
     options("Matrix.warnDeprecatedCoerce" = 1)
     scmat <- BUSpaRse::read_count_output(dir = dirname(data_path), name = basename(data_path), tcc = FALSE)
@@ -80,11 +80,13 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = 'RNA'
   } else if (file.exists(paste0(data_path, "/quants_mat.gz"))) {
     ### Alevin
     message('Found Alevin data.')
+    message("Loading data ...")
     scmat <- Seurat::ReadAlevin(data_path)
     if(out_rds == 'auto') out_dir <- data_path
   } else if (file.exists(paste0(data_path, '_counts.tsv.gz'))) {
     ### UMI-tools
     message('Found UMI-tools data.')
+    message("Loading data ...")
     scmat <- read.table(file = paste0(data_path, '_counts.tsv.gz'), header = TRUE, sep = "\t", quote = "", check.names = FALSE, row.names = 1)
     if(out_rds == 'auto') out_dir <- dirname(data_path)
   } else {
@@ -94,15 +96,25 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = 'RNA'
   ## Reorder scmat
   scmat <- scmat[,order(colnames(scmat))]
   
+  ### Count matrix dimensions 
   message('Full droplets matrix dimensions :')
   droplets.nb <- ncol(scmat)
-  print(dim(scmat))
+  message('\tFeatures = ', nrow(scmat), '\n\tBarcodes = ', ncol(scmat))
   
-  message('Total UMIs :')
+  ### Count total
+  message('Total UMI count :')
   umi.total.nb <- sum(scmat)
-  print(umi.total.nb)
+  message('\t', umi.total.nb)
   
-  ## Computing some metrics
+  ### Sparsity level
+  scprod <- prod(dim(scmat))
+  message('Total expressed feature count :')
+  scZ <- sum(sparseMatrixStats::colCounts(x = scmat, value = 0))
+  message('\t', scprod - scZ)
+  message('Sparsity level :')
+  splev <-  scZ / scprod 
+  message('\t', sprintf('%.5f', splev * 100), '%')
+  ## Metrics
   numi_drop <- Matrix::colSums(x = scmat)
   scmat.bin <- scmat
   attr(scmat.bin, "x")[attr(scmat.bin, "x") >= 1] <- 1
@@ -129,9 +141,9 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = 'RNA'
   sobj@metadata <- mymeta
   
   ## File output
-  if(is.null(out_rds)) {
+  if(!is.null(out_rds)) {
     message('Saving RDS ...')
-    if (out_rds == 'auto') out_rds <- paste0(out_dir, '/', paste(c(sample_name, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), 'raw_SCE.rds'), collapse = '_'))
+    if (out_rds == 'auto') out_rds <- paste0(out_dir, '/', paste(c(sample_name, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), 'Raw.rds'), collapse = '_'))
   saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
   }
   ## Return data ?
@@ -283,16 +295,18 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
   
   message('Full droplets matrix dimensions :')
   droplets.nb <- ncol(scmat)
-  print(dim(sobj))
+  message('\tFeatures = ', nrow(scmat), '\n\tBarcodes = ', ncol(scmat))
   
-  message('Total UMIs :')
+  message('Total UMI count (unfiltered) :')
   umi.total.nb <- sum(scmat)
-  print(umi.total.nb)
+  message('\t', umi.total.nb)
   
   ## Handling merged case
   if(length(sobj@metadata$misc) > 1 & all(vapply(sobj@metadata$misc, is.list, TRUE)))
     sobj@metadata$misc <- list(samplename = paste(vapply(sobj@metadata$misc, function(x) x$samplename, "a"), collapse = '.'), id = max(vapply(sobj@metadata$misc, function(x) x$id, 1)))
   
+  ## Get samplename
+  samplename <- sobj@metadata$misc$samplename
   ## Incrementing id
   sobj@metadata$misc$id <- sobj@metadata$misc$id + 1
   
@@ -315,15 +329,19 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
       ### Yerp ! Filtering empty droplets
       # scmat <- sobj@assays@data@listData$counts[, which(keep.bc)]
       message('Filtered droplets matrix dimensions :')
-      print(dim(scmat[,keep.bc]))
-      message('Total UMIs (filtered) :')
+      message('\tFeatures = ', nrow(scmat[,keep.bc]), '\n\tBarcodes = ', ncol(scmat[,keep.bc]))
+      message('Total UMI count (filtered) :')
       umi.kept.nb <- sum(scmat[,keep.bc])
-      print(umi.kept.nb)
+      message('\t', umi.kept.nb)
       message('Fraction of UMIs in cells :')
-      print(umi.kept.nb / umi.total.nb)
+      message('\t', sprintf('%.2f', umi.kept.nb / umi.total.nb * 100), '%')
+      
+      out_root <- paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a')), collapse = '_'))
       
       ## Plotting when requested
       if(draw_plots){
+        
+        message('Generating plots ...')
         
         ## Computing some metrics
         numi_drop <- Matrix::colSums(x = scmat[,keep.bc])
@@ -334,7 +352,7 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
         rm(scmat.bin)
         
         ### Kneeplot
-        png(filename = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), "kneeplot.png"), collapse = '_')), width = 1000, height = 700)
+        png(filename = paste(c(out_root, "kneeplot.png"), collapse = '_'), width = 1000, height = 700)
         plot(bc_rank$rank, bc_rank$total+1, log = "xy", xlab = "Rank", ylab = "Total", col = ifelse(keep.bc, "red", "black"), pch = 20, cex = ifelse(keep.bc, 1, 2), main = paste0(sobj@metadata$misc$samplename, ' kneeplot (', length(which(keep.bc)), ' barcodes kept)'))
         o <- order(bc_rank$rank)
         lines(bc_rank$rank[o], bc_rank$fitted[o], col = "red")
@@ -344,7 +362,7 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
         dev.off()
         rm(bc_rank)
         ### Saturation plot
-        png(filename = paste0(out_dir, '/', paste(c(sobj@metadata$misc$samplename, sprintf('%02d', sobj@metadata$misc$id), "satplot.png"), collapse = '_')), width = 1000, height = 700)
+        png(filename = paste(c(out_root, "satplot.png"), collapse = '_'), width = 1000, height = 700)
         suppressWarnings(plot(numi_drop, ngen_drop, pch = 20, log = "xy", col = ifelse(keep.bc, "red", "black"), xlab = 'Nb of UMIs in droplet (log)', ylab = 'Nb of genes with at least 1 UMI count in droplets (log)', main = paste0(sobj@metadata$misc$samplename, ' saturation plot (', length(which(keep.bc)), ' barcodes kept)')))
         legend("topleft", pch = c(20, 20), col = c("red", "black"), legend = c("cell", "empty"))
         dev.off()
@@ -377,10 +395,9 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
   
   ## File output
   if(!is.null(out_rds)) {
-    samplename <- if(is.list(sobj@metadata$misc[[1]])) paste(vapply(sobj@metadata$misc, function(x) x$samplename, "a"), collapse = '.') else sobj@metadata$misc$samplename
-    message('Saving RDS ...')
-    if(out_rds == 'auto') out_rds <- paste0(out_dir, '/', paste(c(samplename, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), 'EDf.rds'), collapse = '_'))
-    saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
+    message('Saving SCE object ...')
+    saveRDS(object = sobj, file = paste(c(out_root, 'EDf.rds'), collapse = '_'), compress = 'bzip2')
+    
   }
   
   ## Return data ?
@@ -914,7 +931,7 @@ scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts',
 ### out_rds           ['auto'|char|NULL]    Path+name.rds of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
 ### return_data       [logical]   Should the SCE object be returned by the function ? Default [FALSE].
 ### ...               [...]       Any parameter to give to Seurat::runUMAP()
-scTK_SeuratUMAP <- function(in_rds = NULL, in_dimred = NULL, ndim_max = 10, out_dimred = 'UMAP', out_rds = 'auto', return_data = FALSE, ...) {
+scTK_SeuratUMAP <- function(in_rds = NULL, in_dimred = NULL, ndim_max = 10, my_seed = 12345, out_rds = 'auto', return_data = FALSE, ...) {
   
   ## Parameters checks
   message('Checks ...')
@@ -929,27 +946,8 @@ scTK_SeuratUMAP <- function(in_rds = NULL, in_dimred = NULL, ndim_max = 10, out_
   sobj <- readRDS(in_rds)
   if(!is(sobj, 'SingleCellExperiment')) stop('Provided RDS is not a proper SingleCellExperiment object !')
   
-  ## Checking if requested exp and assay (and feature subset) exist
-  expassay.check <- suppressMessages(d2(sobj))
-  exp_type = NULL
-  if(is.null(exp_name)) {
-    if (is.null(expassay.check$main$name)) exp_type <- 'main'
-  } else {
-    if (exp_name %in% names(expassay.check$alt)) exp_type <- 'alt'
-  }
-  if(is.null(exp_type)) stop('Could not find the requested experiment in neither main nor alternate experiments !')
-  if(exp_type == 'main') {
-    if (!assay %in% expassay.check[['main']][['assay']]) stop('Requested assay does not exist for the main experiment !')
-  }
-  if(exp_type == 'alt') {
-    if(!assay %in% expassay.check[['alt']][[exp_name]]) stop('Requested assay does not exist for the requested alternate experiment !')
-  }
-  
   ## Setting out_dir
   out_dir <- if(out_rds == 'auto') dirname(in_rds) else dirname(out_rds)
-  
-  ## Loading data
-  scmat <- if(exp_type == 'main') SummarizedExperiment::assay(x = sobj, i = assay) else SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = exp_name), i = assay)
   
   ## Handling merged case
   if(length(sobj@metadata$misc) > 1 & all(vapply(sobj@metadata$misc, is.list, TRUE)))
@@ -960,29 +958,23 @@ scTK_SeuratUMAP <- function(in_rds = NULL, in_dimred = NULL, ndim_max = 10, out_
   
   ## Converting to Seurat
   sobj_seu <- Seurat::CreateSeuratObject(counts = SummarizedExperiment::assay(x = sobj, i ='counts'), project = samplename, assay = 'temp', meta.data = as.data.frame(sobj@colData))
-  sobj_seu@assays$temp@data <- as.matrix(scmat)
-  ## Perform scaling + regression
-  sobj_seu <- Seurat::ScaleData(object = sobj_seu, vars.to.regress = vars_to_regress, do.scale = scale_residuals, do.center = center_residuals, scale.max = scale_limit, model.use = model_use, ...)
-  regmat <- sobj_seu@assays$temp@scale.data
-  rm(sobj_seu)
-  ## Inserting into the SCE
-  newname <- paste(c(paste(c(assay, if(!is.null(feature_subset)) 'sub' else NULL, 'R'), collapse = '_'), if(scale_residuals) 'S' else NULL), collapse = '')
+  ## Add input reduced dimension
+  sobj_seu[['mird']] <- Seurat::CreateDimReducObject(embeddings = SingleCellExperiment::reducedDim(x = sobj, type = in_dimred), key = 'MIRD_', assay = 'temp')
+  sobj_seu <- Seurat::RunUMAP(object = sobj_seu, dims = 1:ndim_max, reduction = 'mird', seed.use = my_seed)
   
-  assaylist = list(regmat)
-  names(assaylist) <- newname
-  SingleCellExperiment::altExp(x = sobj, e = newname) <- SingleCellExperiment::SingleCellExperiment(assays = assaylist, mainExpName = newname)
-  ## Adding metadata
-  sobj@metadata$assayType <- rbind(sobj@metadata$assayType, c('transformed', newname))
+  ## Inserting into the SCE
+  out_dimred <- paste0(in_dimred, '_UMAP', ndim_max)
+  SingleCellExperiment::reducedDim(x = sobj, type = out_dimred) <- sobj_seu@reductions$umap@cell.embeddings
+  
+  ## Incrementing id
   sobj@metadata$misc$id <- sobj@metadata$misc$id + 1
   
   ## File output
   if(!is.null(out_rds)) {
     message('Saving RDS ...')
-    out_name <- paste(c(samplename, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), model_use, exp_name, assay, 'REG'), collapse = '_')
+    out_name <- paste(c(samplename, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), out_dimred), collapse = '_')
     if(out_rds == 'auto') out_rds <- paste0(out_dir, '/', out_name, '.rds')
     saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
-    reg_table <- data.frame(Regressed.covariate = vars_to_regress, Type = unname(vapply(vars_to_regress, function(x) is(sobj[[x]])[1], 'a')))
-    write.table(reg_table, file = sub(pattern = '.rds$', replacement = '.tsv', x = out_rds), sep = '\t', quote = FALSE, row.names = FALSE)
   }
   
   ## Return data ?
