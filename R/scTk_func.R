@@ -12,6 +12,7 @@
 
 ## LAUNCH singleCellTK (this function won't actually work in every place for singleCelTK v2.4, as some parts of the workflow will overload the Matrix hack)
 scTK_launch <- function(external_browser = TRUE) {
+  message("Launching singleCellTK ...")
   # library(reticulate)
   ## Install venv
   # sctkPythonInstallConda(envname = 'sctk', packages = c("pip", "scipy", "numpy", "astroid", "six"), pipIgnoreInstalled = FALSE, pythonVersion = '3.9')
@@ -648,7 +649,7 @@ scTK_scSG <- function(in_rds = NULL, exp_name = NULL, raw_assay = 'counts', norm
   newname <- paste0('SG', n_features)
   assaylist <- list(assay = norm_scmat[ok_sg,])
   names(assaylist) <- newname
-  SingleCellExperiment::altExp(x = sobj, e = newname) <- SingleCellExperiment::SingleCellExperiment(assays = assaylist, mainExpName = newname)
+  SingleCellExperiment::altExp(x = sobj, e = newname) <- SingleCellExperiment::SingleCellExperiment(assays = assaylist, mainExpName = NULL)
   rm(raw_scmat, norm_scmat)
   
   ## Updating metadata
@@ -846,7 +847,7 @@ scTK_assess_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', 
 ### center_residuals  [bool]        Perform centering of the regressed matrix. Default [TRUE]
 ### out_rds           ['auto'|char|NULL]    Path+name.rds of the disk output of the generated SCE object, save as a bzip2-compressed RDS archive. If 'auto', the RDS filename will be generated automatically, and written in the same folder as data_path. IF NULL, nothing will be written on disk. Default [auto].
 ### return_data       [logical]   Should the SCE object be returned by the function ? Default [FALSE].
-scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', vars_to_regress = NULL, model_use, scale_residuals = TRUE, scale_limit = 10, center_residuals = TRUE, out_rds = 'auto', return_data = FALSE) {
+scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts', vars_to_regress = NULL, model_use = 'linear', scale_residuals = TRUE, scale_limit = 10, center_residuals = TRUE, out_rds = 'auto', suffix = NULL, return_data = FALSE) {
   
   ## Parameters checks
   message('Checks ...')
@@ -899,10 +900,10 @@ scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts',
   regmat <- sobj_seu@assays$temp@scale.data
   rm(sobj_seu)
   ## Inserting into the SCE
-  newname <- paste(c(paste(c(assay, if(!is.null(feature_subset)) 'sub' else NULL, 'R'), collapse = '_'), if(scale_residuals) 'S' else NULL), collapse = '')
+  newname <- paste(c(paste(c(assay, 'R'), collapse = '_'), if(scale_residuals) 'S' else NULL), collapse = '')
   assaylist = list(regmat)
   names(assaylist) <- newname
-  SingleCellExperiment::altExp(x = sobj, e = newname) <- SingleCellExperiment::SingleCellExperiment(assays = assaylist, mainExpName = newname)
+  SingleCellExperiment::altExp(x = sobj, e = newname) <- SingleCellExperiment::SingleCellExperiment(assays = assaylist, mainExpName = NULL)
   ## Adding metadata
   sobj@metadata$assayType <- rbind(sobj@metadata$assayType, c('transformed', newname))
   sobj@metadata$misc$id <- sobj@metadata$misc$id + 1
@@ -910,7 +911,7 @@ scTK_regress_covar <- function(in_rds = NULL, exp_name = NULL, assay = 'counts',
   ## File output
   if(!is.null(out_rds)) {
     message('Saving RDS ...')
-    out_name <- paste(c(samplename, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), model_use, exp_name, assay, 'REG'), collapse = '_')
+    out_name <- paste(c(samplename, paste0(sprintf('%02d', sobj@metadata$misc$id), 'a'), model_use, if(exp_name == assay) exp_name else c(exp_name, assay), suffix, 'REG'), collapse = '_')
     if(out_rds == 'auto') out_rds <- paste0(out_dir, '/', out_name, '.rds')
     saveRDS(object = sobj, file = out_rds, compress = 'bzip2')
     reg_table <- data.frame(Regressed.covariate = vars_to_regress, Type = unname(vapply(vars_to_regress, function(x) is(sobj[[x]])[1], 'a')))
