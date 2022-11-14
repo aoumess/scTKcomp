@@ -159,7 +159,7 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = NULL,
 ## in_rds         [char]      Path to a SCE object saved as a RDS
 ## max_levels     [int>0]     Maximal number of unique values to consider a barcode annotation as a factor rather than a continuous numeric vector
 ## describe       ['all', 'assays', 'dimred', 'coldata']    Type of entries to describe
-scTK_descriptor <- function(in_rds = NULL, describe = 'all', sparse_level = TRUE, max_levels = 100, assay_plot = FALSE, out_dir = 'auto', return_data = FALSE) {
+scTK_descriptor <- function(in_rds = NULL, describe = 'all', sparse_level = TRUE, max_levels = 100, out_dir = 'auto', return_data = FALSE) {
   ## Checks
   if (is.null(in_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
   if(!file.exists(in_rds)) stop('Provided RDS not found !')
@@ -201,13 +201,13 @@ scTK_descriptor <- function(in_rds = NULL, describe = 'all', sparse_level = TRUE
         message('\tASSAY ', ea, ' : [', assay_name, ']  Dims:[', nrow(expassays[[ea]]), ' x ', ncol(expassays[[ea]]), ']  Range:[', paste(sprintf('%.2f', range(expassays[[ea]], na.rm = TRUE)), collapse = '-'), ']  Type:[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == assay_name], ']')
         if (sparse_level & is(expassays[[ea]], 'dgCMatrix')) {
           splev <- sum(sparseMatrixStats::colCounts(x = expassays[[ea]], value = 0)) / prod(dim(expassays[[ea]]))
-          message('\t\tSparsity level : ', sprintf('%.2f', splev * 100), '%')
+          message('\t\tSparsity level : ', sprintf('%.5f', splev * 100), '%')
           message('\t\tCounts : ', round(sum(expassays[[ea]])))
         }
         if(assay_plot) {
-          png(paste0(out_dir, '/', paste(c(rootname, exp_name, assay_name))))
-          plot3D::persp3D(z=log(as.matrix(SummarizedExperiment::assay(x = sobj, i = assay_name))+1), xlab = 'Features', ylab = 'Cells', zlab = "Value", main = assay_name)
-          dev.off()
+          # png(paste0(out_dir, '/', paste(c(rootname, exp_name, assay_name))))
+          # plot3D::persp3D(z=log(as.matrix(SummarizedExperiment::assay(x = sobj, i = assay_name))+1), xlab = 'Features', ylab = 'Cells', zlab = "Value", main = assay_name)
+          # dev.off()
         }
       }
     }
@@ -228,9 +228,9 @@ scTK_descriptor <- function(in_rds = NULL, describe = 'all', sparse_level = TRUE
         for (ea in seq_along(expassays)) {
           message('\tASSAY ', ea, ' : [', expassays[ea], ']  Dims:[', nrow(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ' x ', ncol(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ']  Range:[', paste(sprintf('%.2f', range(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea]), na.rm = TRUE)), collapse = '-'), ']  Type:[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == expassays[ea]], ']')
           if(assay_plot) {
-            png(paste0(out_dir, '/', paste(c(rootname, exp_name, assay_name))))
-            plot3D::persp3D(z=log(as.matrix(SingleCellExperiment::altExp(x = sobj, e = SummarizedExperiment::assay(x = sobj, i = assay_name)))+1), xlab = 'Features', ylab = 'Cells', zlab = "Value", main = assay_name)
-            dev.off()
+            # png(paste0(out_dir, '/', paste(c(rootname, exp_name, assay_name))))
+            # plot3D::persp3D(z=log(as.matrix(SingleCellExperiment::altExp(x = sobj, e = SummarizedExperiment::assay(x = sobj, i = assay_name)))+1), xlab = 'Features', ylab = 'Cells', zlab = "Value", main = assay_name)
+            # dev.off()
           }
         }
       }
