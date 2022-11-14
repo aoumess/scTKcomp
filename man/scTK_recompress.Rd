@@ -1,4 +1,5 @@
 \name{scTK_recompress}
+\alias{scTK_recompress}
 \title{Recompressing a RDS object}
 \usage{
   scTK_recompress <- function(in_rds = NULL, compress = 'bzip2')

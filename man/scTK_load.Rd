@@ -1,4 +1,5 @@
 \name{scTK_load}
+\alias{scTK_load}
 \title{Loading single cell data from Alevin/Bustools/CellRanger/UMI-tools, saving to a SCE object}
 \usage{
   scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = NULL, out_rds = 'auto', return_data = FALSE)

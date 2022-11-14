@@ -16,6 +16,7 @@ Imports:
   Seurat,
   knitr,
   scater,
+  entropy,
   ComplexHeatmap,
   S4Vectors,
   SingleCellExperiment,

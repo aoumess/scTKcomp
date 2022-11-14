@@ -1,4 +1,5 @@
 \name{scTK_launch}
+\alias{scTK_launch}
 \title{Launch singleCellTK in its Shiny interface}
 \usage{
   scTK_launch <- function(external_browser = TRUE)
