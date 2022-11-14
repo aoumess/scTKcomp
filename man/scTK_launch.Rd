@@ -5,6 +5,7 @@
 }
 \arguments{
   \item{external_browser}{Use the default external web browser rather than the one included in Rstudio}
+}
 \description{
   This function launches the Shiny interface of singleCellTK, possibly in the default system web browser.
 }
