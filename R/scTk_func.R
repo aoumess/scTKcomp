@@ -363,15 +363,10 @@ scTK_edf <- function(in_rds = NULL, assay = 'counts', droplets_min = 1E+04, empt
         dev.off()
         rm(bc_rank)
         ### Saturation plot
-        png(filename = paste(c(out_root, "satplot.png"), collapse = '_'), width = 1000, height = 700)
-        suppressWarnings(plot(numi_drop, ngen_drop, pch = 20, log = "xy", col = ifelse(keep.bc, "red", "black"), xlab = 'Nb of UMIs in droplet (log)', ylab = 'Nb of genes with at least 1 UMI count in droplets (log)', main = paste0(sobj@metadata$misc$samplename, ' saturation plot (', length(which(keep.bc)), ' barcodes kept)')))
-        legend("topleft", pch = c(20, 20), col = c("red", "black"), legend = c("cell", "empty"))
-        dev.off()
-        ### Saturation distrib plot
-        # png(filename = paste0(out_dir, '/', paste(c(sample_name, sprintf('%02d', sobj@metadata$misc$id), "satdistplot.png"), collapse = '_')), width = 1000, height = 700)
-        # umipgen <- numi_drop / ngen_drop
-        # upg.range <- range(umipgen)
-        # plot(density(umipgen[keep.bc], col = "red", xlim = c(0, upg.range[2], )))
+        # png(filename = paste(c(out_root, "satplot.png"), collapse = '_'), width = 1000, height = 700)
+        # suppressWarnings(plot(numi_drop, ngen_drop, pch = 20, log = "xy", col = ifelse(keep.bc, "red", "black"), xlab = 'Nb of UMIs in droplet (log)', ylab = 'Nb of genes with at least 1 UMI count in droplets (log)', main = paste0(sobj@metadata$misc$samplename, ' saturation plot (', length(which(keep.bc)), ' barcodes kept)')))
+        # legend("topleft", pch = c(20, 20), col = c("red", "black"), legend = c("cell", "empty"))
+        # dev.off()
       }
       
       ## Applying filter
