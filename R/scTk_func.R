@@ -33,10 +33,10 @@ scTK_launch <- function(external_browser = TRUE) {
   singleCellTK::singleCellTK()
 }
 
-scTK_recompress <- function(in_sobj = NULL, compress = 'bzip2') {
-  sobj <- readRDS(in_sobj)
-  message('Recompressing [', in_sobj, '] ...')
-  saveRDS(object = sobj, file = in_sobj, compress = 'bzip2')
+scTK_recompress <- function(in_rds = NULL, compress = 'bzip2') {
+  sobj <- readRDS(in_rds)
+  message('Recompressing [', in_rds, '] ...')
+  saveRDS(object = sobj, file = in_rds, compress = 'bzip2')
 }
 ## LOAD 10X / BUStools / Alevin / UMI-tools DATA TO SingleCellExperiment OBJECT, SAVE IT ON DISK AND/OR RETURN IT
 ### data_path       [char]    Path to SC data (10X, BUStools, Alevin, or UMI-tools). If input data come from BUStools or UMI-tools, this path should also contain the rootname of the generated files. Default [NULL]
@@ -82,7 +82,7 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = NULL,
     ### Alevin
     message('Found Alevin data.')
     message("Loading data ...")
-    scmat <- Seurat::ReadAlevin(data_path)
+    scmat <- SeuratWrappers::ReadAlevin(data_path)
     if(out_rds == 'auto') out_dir <- data_path
   } else if (file.exists(paste0(data_path, '_counts.tsv.gz'))) {
     ### UMI-tools
@@ -159,7 +159,7 @@ scTK_load <- function(data_path = NULL, sample_name = 'SAMPLE', exp_name = NULL,
 ## in_rds         [char]      Path to a SCE object saved as a RDS
 ## max_levels     [int>0]     Maximal number of unique values to consider a barcode annotation as a factor rather than a continuous numeric vector
 ## describe       ['all', 'assays', 'dimred', 'coldata']    Type of entries to describe
-scTK_descriptor <- function(in_rds = NULL, describe = 'all', sparse_level = TRUE, max_levels = 100, out_dir = 'auto', return_data = FALSE) {
+scTK_descriptor <- function(in_rds = NULL, describe = 'all', sparse_level = TRUE, max_levels = 100, return_data = FALSE) {
   ## Checks
   if (is.null(in_rds)) stop('A RDS containing a SingleCellExperiment object is required !')
   if(!file.exists(in_rds)) stop('Provided RDS not found !')
@@ -176,10 +176,10 @@ scTK_descriptor <- function(in_rds = NULL, describe = 'all', sparse_level = TRUE
   ## Additional checks on sobj
   if(!is(sobj, 'SingleCellExperiment')) stop('Provided RDS is not a proper SingleCellExperiment object !')
   
-  if (assay_plot) {
-    if(out_dir == 'auto') out_dir <- dirname(in_rds)
-    rootname <- sub(pattern = '.rds', replacement = '', x = basename(in_rds), ignore.case = TRUE)
-  } 
+  # if (assay_plot) {
+  #   if(out_dir == 'auto') out_dir <- dirname(in_rds)
+  #   rootname <- sub(pattern = '.rds', replacement = '', x = basename(in_rds), ignore.case = TRUE)
+  # } 
   retlist <- list()
   ## Handling merged case
   if(length(sobj@metadata$misc) > 1 & all(vapply(sobj@metadata$misc, is.list, TRUE)))
@@ -204,11 +204,11 @@ scTK_descriptor <- function(in_rds = NULL, describe = 'all', sparse_level = TRUE
           message('\t\tSparsity level : ', sprintf('%.5f', splev * 100), '%')
           message('\t\tCounts : ', round(sum(expassays[[ea]])))
         }
-        if(assay_plot) {
-          # png(paste0(out_dir, '/', paste(c(rootname, exp_name, assay_name))))
-          # plot3D::persp3D(z=log(as.matrix(SummarizedExperiment::assay(x = sobj, i = assay_name))+1), xlab = 'Features', ylab = 'Cells', zlab = "Value", main = assay_name)
-          # dev.off()
-        }
+        # if(assay_plot) {
+        #   png(paste0(out_dir, '/', paste(c(rootname, exp_name, assay_name))))
+        #   plot3D::persp3D(z=log(as.matrix(SummarizedExperiment::assay(x = sobj, i = assay_name))+1), xlab = 'Features', ylab = 'Cells', zlab = "Value", main = assay_name)
+        #   dev.off()
+        # }
       }
     }
     ### DIMRED
@@ -227,11 +227,11 @@ scTK_descriptor <- function(in_rds = NULL, describe = 'all', sparse_level = TRUE
       if('assay' %in% describe) {
         for (ea in seq_along(expassays)) {
           message('\tASSAY ', ea, ' : [', expassays[ea], ']  Dims:[', nrow(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ' x ', ncol(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea])), ']  Range:[', paste(sprintf('%.2f', range(SummarizedExperiment::assay(x = SingleCellExperiment::altExp(x = sobj, e = alt.names[en]), i = expassays[ea]), na.rm = TRUE)), collapse = '-'), ']  Type:[', sobj@metadata$assayType$assayTag[sobj@metadata$assayType$assayName == expassays[ea]], ']')
-          if(assay_plot) {
-            # png(paste0(out_dir, '/', paste(c(rootname, exp_name, assay_name))))
-            # plot3D::persp3D(z=log(as.matrix(SingleCellExperiment::altExp(x = sobj, e = SummarizedExperiment::assay(x = sobj, i = assay_name)))+1), xlab = 'Features', ylab = 'Cells', zlab = "Value", main = assay_name)
-            # dev.off()
-          }
+          # if(assay_plot) {
+          #   png(paste0(out_dir, '/', paste(c(rootname, exp_name, assay_name))))
+          #   plot3D::persp3D(z=log(as.matrix(SingleCellExperiment::altExp(x = sobj, e = SummarizedExperiment::assay(x = sobj, i = assay_name)))+1), xlab = 'Features', ylab = 'Cells', zlab = "Value", main = assay_name)
+          #   dev.off()
+          # }
         }
       }
     } else retlist[['alt']][[alt.names[en]]] <- names(SingleCellExperiment::altExp(x = sobj, e = alt.names[en])@assays)
@@ -1026,18 +1026,18 @@ HVG_Statistic2 <- function (object, First_time_unsupervised_clustering_label = "
 
 ## (Unexported function) Hack for scSensitiveGenes to support any number of features (was hardcoded to 2000 to compare to Seurat default)
 GetSensitivegene2 <- function (object = NULL, min_nClusters = "Default", min_nCell = 0, HVG_Anno = NULL) {
-  require(entropy)
-  require(Seurat)
-  require(ggplot2)
-  require(dplyr)
-  require(glue)
+  # require(entropy)
+  # require(Seurat)
+  # require(ggplot2)
+  # require(dplyr)
+  # require(glue)
   if (min_nClusters == "Default") {
     min_nClusters <- floor(length(levels(object))/2)
   }
   pre_Senstive_gene.statistic <- HVG_Anno$HVG_Type.statistic[HVG_Anno$HVG_Type.statistic$nCluster > min_nClusters & HVG_Anno$HVG_Type.statistic$nCell > min_nCell,]
   pre_Senstive_gene <- rownames(pre_Senstive_gene.statistic)
-  avg_expression <- AverageExpression(object, assays = "RNA", features = pre_Senstive_gene)
-  data <- apply(avg_expression$RNA, 1, function(x) entropy(x))
+  avg_expression <- Seurat::AverageExpression(object, assays = "RNA", features = pre_Senstive_gene)
+  data <- apply(avg_expression$RNA, 1, function(x) entropy::entropy(x))
   data <- as.data.frame(data)
   data$gene <- rownames(data)
   data <- data[order(data$data), ]

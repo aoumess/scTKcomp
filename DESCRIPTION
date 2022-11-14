@@ -2,8 +2,8 @@ Encoding: UTF-8
 Package: scTKcomp
 Type: Package
 Title: A complement to singleCellTK
-Version: 0.0.1
-Date: 2022-10-17
+Version: 0.0.2
+Date: 2022-11-14
 Author: Bastien Job
 Authors@R: person("Bastien", "Job", email = "bastien.job@inserm.fr", role = c("aut", "cre"))
 Depends: R(>= 3.1.0)
@@ -14,10 +14,22 @@ Imports:
   ggplot2,
   Matrix,
   Seurat,
+  knitr,
+  scater,
+  ComplexHeatmap,
+  S4Vectors,
+  SingleCellExperiment,
+  SummarizedExperiment,
+  circlize,
+  irlba,
+  singleCellTK,
+  sparseMatrixStats,
+  SeuratWrappers
 Suggests:
+  singleCellTK
 biocViews: Software
 BugReports: https://github.com/aoumess/scTKcomp/issues
-Description: A supplementary package for singleCellTK, filling some gaps (empty droplets filtering, cell cycle scoring, ...).
+Description: A complementary package for singleCellTK, filling some gaps, adding some functionalities.
 License: MIT + file LICENSE
 LazyData: false
 Byte-Compile: yes
